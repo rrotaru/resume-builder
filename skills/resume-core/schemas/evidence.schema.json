@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Evidence item (one line of 02-evidence/evidence.jsonl)",
+  "type": "object",
+  "required": ["id", "source", "kind", "native_key", "title", "engineer_role", "created_at"],
+  "additionalProperties": false,
+  "properties": {
+    "id": {"$ref": "#/$defs/evidenceId"},
+    "source": {"enum": ["github", "gitlab", "git", "jira", "review"]},
+    "kind": {"enum": ["pr", "mr", "commit", "review", "issue", "ticket", "epic", "perf_review"]},
+    "native_key": {"type": "string", "minLength": 1},
+    "url": {"type": ["string", "null"]},
+    "title": {"type": "string"},
+    "excerpt": {"type": "string"},
+    "engineer_role": {"enum": ["author", "reviewer", "assignee", "reporter", "subject"]},
+    "created_at": {"type": "string", "minLength": 10},
+    "closed_at": {"type": ["string", "null"]},
+    "state": {"type": ["string", "null"]},
+    "stats": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "additions": {"type": "integer", "minimum": 0},
+        "deletions": {"type": "integer", "minimum": 0},
+        "files": {"type": "integer", "minimum": 0}
+      }
+    },
+    "labels": {"type": "array", "items": {"type": "string"}},
+    "links": {"type": "array", "items": {"$ref": "#/$defs/evidenceId"}},
+    "raw_ref": {"type": ["string", "null"]}
+  },
+  "$defs": {
+    "evidenceId": {"type": "string", "pattern": "^ev_[0-9a-f]{8}([0-9a-f]{4})?$"}
+  }
+}

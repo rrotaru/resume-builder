@@ -1,0 +1,34 @@
+[
+  {
+    "id": "b_1",
+    "project_id": "pj_da2a2b53",
+    "work_ref": null,
+    "text": "Cut p99 checkout latency 40% for Contoso Bank by building a Redis-backed idempotency cache for Project Falcon in Go",
+    "form": "xyz_quantified",
+    "sources": [
+      "ev_191cc8ce",
+      "ev_99a74656",
+      "metric:m_1"
+    ]
+  },
+  {
+    "id": "b_2",
+    "project_id": null,
+    "work_ref": 0,
+    "text": "Mentored two new engineers through on-call onboarding",
+    "form": "xyz",
+    "sources": [
+      "ev_cbf558fa"
+    ]
+  },
+  {
+    "id": "b_3",
+    "project_id": null,
+    "work_ref": 1,
+    "text": "Migrated the order service from PHP to Go, serving 2M requests per day",
+    "form": "xyz",
+    "sources": [
+      "resume:/work/1/highlights/0"
+    ]
+  }
+]

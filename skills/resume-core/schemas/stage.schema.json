@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Stage metadata (<stage>/_stage.json)",
+  "type": "object",
+  "required": ["stage", "schema_version", "created_at", "inputs"],
+  "additionalProperties": false,
+  "properties": {
+    "stage": {"enum": ["01-raw", "02-evidence", "03-profile", "04-projects", "05-terms",
+                       "06-bullets", "07-sanitized", "08-ats", "out"]},
+    "schema_version": {"const": 1},
+    "created_at": {"type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$"},
+    "inputs": {
+      "type": "object",
+      "additionalProperties": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+    },
+    "extra": {"type": "object"}
+  }
+}

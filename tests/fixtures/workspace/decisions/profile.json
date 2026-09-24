@@ -1,0 +1,9 @@
+{
+  "basics": {
+    "email": "jordan.rivera@example.com",
+    "location": {
+      "city": "Denver",
+      "region": "CO"
+    }
+  }
+}

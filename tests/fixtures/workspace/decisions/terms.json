@@ -1,0 +1,17 @@
+[
+  {
+    "term": "Project Falcon",
+    "replacement": "real-time fraud-detection platform",
+    "kind": "codename"
+  },
+  {
+    "term": "Contoso Bank",
+    "replacement": "a top-10 US bank",
+    "kind": "customer"
+  },
+  {
+    "term": "Go",
+    "replacement": null,
+    "kind": "other"
+  }
+]

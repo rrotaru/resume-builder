@@ -1,0 +1,10 @@
+[
+  {
+    "bullet_id": "b_1",
+    "text": "Cut p99 checkout latency 40% for a top-10 US bank by building a Redis-backed idempotency cache in Go, raising checkout SLO compliance",
+    "text_sha256": "f6c1490f4c91b1883112ce62228851f0eaefcc79db157cb042f2a3adbf50735f",
+    "reasons": [
+      "introduces 'SLO compliance', which no cited source mentions"
+    ]
+  }
+]

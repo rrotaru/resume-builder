@@ -1,0 +1,18 @@
+[
+  {
+    "term": "Project Falcon",
+    "kind": "codename",
+    "proposed_replacement": "real-time fraud-detection platform",
+    "found_in": [
+      "04-projects/projects.json"
+    ]
+  },
+  {
+    "term": "Contoso Bank",
+    "kind": "customer",
+    "proposed_replacement": "a top-10 US bank",
+    "found_in": [
+      "04-projects/projects.json"
+    ]
+  }
+]
