@@ -1,7 +1,7 @@
 # Resume Builder: Architecture Design
 
 - **Date:** 2026-09-24
-- **Status:** Draft, pending review
+- **Status:** Approved
 - **Scope:** Overall architecture: packaging, workspace layout, stage contracts, checkpoints, error handling and testing. Each subsystem gets its own follow-up spec (see [Follow-up specs](#follow-up-specs)).
 
 ## Goal
