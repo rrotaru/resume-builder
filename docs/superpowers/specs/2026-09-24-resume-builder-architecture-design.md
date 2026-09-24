@@ -39,8 +39,9 @@ resume-builder/
     resume-core/             # workspace conventions, schemas, checks (shared)
       SKILL.md
       schemas/               # JSON Schema per stage file and decisions file
-      scripts/               # validate.py, check_sources.py, check_terms.py,
-                             # check_flags.py, ids.py, stage.py
+      scripts/               # validate.py, stage.py, check_sources.py, check_terms.py,
+                             # check_flags.py, init_workspace.py
+        rcore/               # shared stdlib-only library (ids, schema, stages, checks)
     resume-init/
     resume-collect/
       scripts/               # normalize_github.py, normalize_gitlab.py, normalize_jira.py,
@@ -71,7 +72,8 @@ Namespaced as `/resume-builder:<name>`. Each command file only passes arguments 
 2. No hooks, subagents, `${CLAUDE_PLUGIN_ROOT}`, or other harness-specific constructs inside skills.
 3. Skills read and write only inside the workspace (default `./resume-workspace`, overridable with `--workspace`).
 4. Skills are installed as a set, because they share `resume-core` by relative path.
-5. Each skill ends by running `resume-core/scripts/validate.py` on the files it wrote. Validation does not depend on the harness.
+5. Each skill writes its stage through `resume-core/scripts/stage.py` (begin, then commit), which validates the files before swapping them into place. Validation does not depend on the harness.
+6. Scripts in other skills may import the shared `rcore` library from `../resume-core/scripts/`.
 
 A lint script in `tests/` enforces rules 1–2.
 
@@ -111,7 +113,7 @@ resume-workspace/
  "inputs": {"02-evidence/evidence.jsonl": "sha256:...", "decisions/projects.json": "sha256:..."}}
 ```
 
-A stage is **stale** when any recorded input hash no longer matches. `resume-build` uses this to offer reuse or rebuild. A standalone command warns before consuming stale inputs.
+A stage is **stale** when any recorded input hash no longer matches, an input is gone, or an input lives in a stage that is itself stale. `resume-build` uses this to offer reuse or rebuild. A standalone command warns before consuming stale inputs.
 
 **Atomic writes.** A stage writes to `<stage>.tmp/`, validates, then renames into place. On failure the previous stage output remains intact.
 
@@ -140,7 +142,7 @@ All files are JSON or JSONL and validated against `resume-core/schemas`.
 
 ### Profile (`03-profile/profile.json`)
 
-[JSON Resume](https://jsonresume.org/schema) with an added `x-sources` array on each entry (for example `["resume:work[2]"]`). Values in `decisions/profile.json` take precedence over imported values.
+[JSON Resume](https://jsonresume.org/schema) with an added `x-sources` array on each entry (for example `["resume:/work/2"]`). Values in `decisions/profile.json` take precedence over imported values.
 
 ### Project (`04-projects/projects.json`)
 
@@ -164,7 +166,7 @@ All files are JSON or JSONL and validated against `resume-core/schemas`.
 ```
 
 - `form`: `xyz_quantified | xyz`
-- Each `sources` entry is `ev_<id>`, `metric:<id>`, `resume:<json-pointer>`, or `wizard:<key>`.
+- Each `sources` entry is `ev_<id>`, `metric:<id>`, `resume:<json-pointer>` (into `03-profile/profile.json`), or `wizard:<json-pointer>` (into `decisions/profile.json`).
 - Bullets for earlier roles set `work_ref` (index into profile `work`) and cite `resume:` sources.
 
 ### Decisions
@@ -181,7 +183,7 @@ An attestation applies only while the bullet's text hash matches, so any later e
 
 ### Tailored resume (`08-ats/.../resume.json`)
 
-JSON Resume where each highlight carries `x-bullet-id` and `x-sources`. This is the only input to rendering. `report.json` holds ATS lint results and keyword coverage. `flags.json` (job versions only) lists rewritten bullets whose claims are not supported by their sources.
+JSON Resume where each `work` and `projects` entry has an `x-highlights` array of `{bullet_id, text, sources}`, and `highlights` holds the same texts in the same order (JSON Resume highlights are plain strings, so the sourcing lives alongside them). This is the only input to rendering. `report.json` holds ATS lint results and keyword coverage. `flags.json` (job versions only) lists rewritten bullets whose claims are not supported by their sources.
 
 ## Skills
 
@@ -275,7 +277,7 @@ Every checkpoint persists its choices to `decisions/`, so an interrupted run res
 
 Each gets its own spec → plan → implementation cycle, in this order. Render comes early so the pipeline produces a real document from fixtures as soon as possible.
 
-1. **resume-core:** schemas, `validate.py`, `ids.py`, `stage.py`, the three checks, fixture workspace.
+1. **resume-core** and **resume-init:** schemas, the `rcore` library, `validate.py`, `stage.py`, the three checks, workspace creation, fixture workspace, skill lint, CI.
 2. **resume-render:** template, PDF/DOCX/TXT output, render tests.
 3. **resume-import:** text extraction and profile mapping.
 4. **resume-collect:** connector discovery, normalizers, git log, reviews, linking.
