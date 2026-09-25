@@ -90,3 +90,63 @@ def test_status_propagates_staleness_downstream(workspace):
     status = stages.status(workspace)
     assert status["04-projects"] == "stale"
     assert status["06-bullets"] == "stale"
+
+
+def test_begin_from_current_copies_committed_output_without_meta(workspace):
+    wsio.write_json(workspace / "08-ats" / "_stage.json", {"stage": "08-ats"})
+    tmp = stages.begin(workspace, "08-ats", from_current=True)
+    assert not (tmp / "_stage.json").exists()
+    assert (wsio.read_json(tmp / "general" / "resume.json")
+            == wsio.read_json(workspace / "08-ats" / "general" / "resume.json"))
+    assert (tmp / "jobs" / "fintech-sre" / "flags.json").is_file()
+
+
+def test_begin_from_current_lets_one_job_be_replaced(workspace):
+    tmp = stages.begin(workspace, "08-ats", from_current=True)
+    general = wsio.read_json(tmp / "general" / "resume.json")
+    wsio.write_json(tmp / "jobs" / "other" / "resume.json", general)
+    assert stages.commit(workspace, "08-ats", ["07-sanitized"]) == []
+    assert (workspace / "08-ats" / "jobs" / "fintech-sre" / "resume.json").is_file()
+    assert (workspace / "08-ats" / "jobs" / "other" / "resume.json").is_file()
+
+
+def test_begin_from_current_without_committed_stage_is_empty(workspace):
+    assert list(stages.begin(workspace, "out", from_current=True).iterdir()) == []
+
+
+def test_begin_from_current_discards_leftover_tmp(workspace):
+    tmp = stages.begin(workspace, "06-bullets")
+    (tmp / "junk.txt").write_text("x")
+    tmp = stages.begin(workspace, "06-bullets", from_current=True)
+    assert sorted(p.name for p in tmp.iterdir()) == ["bullets.json"]
+
+
+def test_status_and_begin_recover_from_interrupted_swap(workspace):
+    before = wsio.read_json(workspace / "06-bullets" / "bullets.json")
+    (workspace / "06-bullets").rename(workspace / "06-bullets.old")
+    stages.status(workspace)
+    assert wsio.read_json(workspace / "06-bullets" / "bullets.json") == before
+    assert not (workspace / "06-bullets.old").exists()
+
+    (workspace / "04-projects").rename(workspace / "04-projects.old")
+    stages.begin(workspace, "04-projects")
+    assert (workspace / "04-projects" / "projects.json").is_file()
+    assert not (workspace / "04-projects.old").exists()
+
+
+def test_commit_recovers_before_swapping(workspace):
+    (workspace / "06-bullets").rename(workspace / "06-bullets.old")
+    tmp = stages.tmp_dir(workspace, "06-bullets")
+    tmp.mkdir()
+    wsio.write_json(tmp / "bullets.json", [{"id": "b_1", "text": ""}])
+    assert stages.commit(workspace, "06-bullets", [])  # invalid output
+    assert (workspace / "06-bullets" / "bullets.json").is_file()
+
+
+@pytest.mark.parametrize("rel", ["/etc/passwd", "../outside", "04-projects/../../x", "..",
+                                 r"C:\x", r"04-projects\..\..\x"])
+def test_commit_rejects_inputs_outside_the_workspace(workspace, rel):
+    _write_bullets(workspace, [BULLET])
+    assert stages.commit(workspace, "06-bullets", ["04-projects", rel]) == [
+        f"input must be workspace-relative: {rel}"
+    ]

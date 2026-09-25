@@ -63,3 +63,23 @@ def test_check_sources_cli_reports_missing_file(workspace):
     result = run("check_sources.py", "--workspace", workspace, "06-bullets/nope.json")
     assert result.returncode == 1
     assert result.stdout.splitlines() == ["06-bullets/nope.json: not found"]
+
+
+def test_stage_cli_from_current_and_extra(workspace):
+    tmp = run("stage.py", "--workspace", workspace, "begin", "08-ats", "--from-current").stdout.strip()
+    assert tmp.endswith("08-ats.tmp")
+    assert (workspace / "08-ats.tmp" / "jobs" / "fintech-sre" / "resume.json").is_file()
+    committed = run("stage.py", "--workspace", workspace, "commit", "08-ats",
+                    "--inputs", "07-sanitized", "--extra", '{"skipped_rows": 3}')
+    assert committed.returncode == 0, committed.stdout
+    meta = json.loads((workspace / "08-ats" / "_stage.json").read_text())
+    assert meta["extra"] == {"skipped_rows": 3}
+
+
+def test_stage_cli_rejects_bad_extra(workspace):
+    run("stage.py", "--workspace", workspace, "begin", "05-terms")
+    (workspace / "05-terms.tmp" / "candidates.json").write_text("[]")
+    for bad in ["{not json", "[1, 2]"]:
+        result = run("stage.py", "--workspace", workspace, "commit", "05-terms", "--extra", bad)
+        assert result.returncode == 2 and "--extra" in result.stderr
+    assert (workspace / "05-terms.tmp").is_dir()

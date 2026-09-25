@@ -5,8 +5,8 @@
 """Stage lifecycle for resume-builder skills.
 
 Usage:
-  uv run stage.py --workspace WS begin STAGE
-  uv run stage.py --workspace WS commit STAGE --inputs REL [REL ...]
+  uv run stage.py --workspace WS begin STAGE [--from-current]
+  uv run stage.py --workspace WS commit STAGE --inputs REL [REL ...] [--extra '{"key": "value"}']
   uv run stage.py --workspace WS status
 """
 import argparse
@@ -23,18 +23,29 @@ def main() -> int:
     sub = parser.add_subparsers(dest="command", required=True)
     begin = sub.add_parser("begin", help="create an empty <stage>.tmp/ and print its path")
     begin.add_argument("stage", choices=stages.STAGES)
+    begin.add_argument("--from-current", action="store_true",
+                       help="start from a copy of the committed <stage>/ instead of an empty folder")
     commit = sub.add_parser("commit", help="validate <stage>.tmp/ and swap it into place")
     commit.add_argument("stage", choices=stages.STAGES)
     commit.add_argument("--inputs", nargs="*", default=[],
                         help="workspace-relative files or folders this stage read")
+    commit.add_argument("--extra", help="JSON object stored as \"extra\" in _stage.json")
     sub.add_parser("status", help="print each stage as missing, fresh or stale")
     args = parser.parse_args()
 
     if args.command == "begin":
-        print(stages.begin(args.workspace, args.stage))
+        print(stages.begin(args.workspace, args.stage, from_current=args.from_current))
         return 0
     if args.command == "commit":
-        errors = stages.commit(args.workspace, args.stage, args.inputs)
+        extra = None
+        if args.extra is not None:
+            try:
+                extra = json.loads(args.extra)
+            except json.JSONDecodeError as exc:
+                parser.error(f"--extra is not valid JSON: {exc}")
+            if not isinstance(extra, dict):
+                parser.error("--extra must be a JSON object")
+        errors = stages.commit(args.workspace, args.stage, args.inputs, extra=extra)
         for error in errors:
             print(error)
         if errors:

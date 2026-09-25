@@ -14,6 +14,9 @@ EMPTY_DECISIONS = {
     "attestations.json": [],
 }
 
+NOT_EXCLUDED_WARNING = ("warning: workspace is inside a git repository but was not excluded; "
+                        "do not commit it")
+
 
 def _git(cwd: Path, *args: str) -> str | None:
     try:
@@ -24,26 +27,45 @@ def _git(cwd: Path, *args: str) -> str | None:
     return out.stdout.strip()
 
 
-def exclude_from_git(workspace: Path) -> str | None:
-    """If the workspace is inside a git repo, add it to .git/info/exclude.
+def gitignore_escape(path: str) -> str:
+    """Backslash-escape characters that gitignore treats specially (\\ [ * ? ! and a leading #)."""
+    escaped = "".join("\\" + c if c in "\\[*?!" else c for c in path)
+    return "\\" + escaped if escaped.startswith("#") else escaped
 
-    Returns the excluded pattern, or None when not in a repo or when the
-    workspace is the repository root.
+
+def inside_git_repo(workspace: Path) -> bool:
+    return _git(workspace, "rev-parse", "--show-toplevel") is not None
+
+
+def exclude_from_git(workspace: Path) -> str | None:
+    """If the workspace is inside a git repo, add it to the repo's info/exclude.
+
+    Returns the excluded pattern, or None when not in a repo, when the
+    workspace is the repository root, or when git or the write fails.
     """
+    workspace = Path(workspace)
     top = _git(workspace, "rev-parse", "--show-toplevel")
-    git_path = _git(workspace, "rev-parse", "--path-format=absolute", "--git-path", "info/exclude")
-    if top is None or git_path is None:
+    git_path = _git(workspace, "rev-parse", "--git-path", "info/exclude")
+    if top is None or not git_path:
         return None
-    relative = workspace.resolve().relative_to(Path(top).resolve()).as_posix()
+    try:
+        relative = workspace.resolve().relative_to(Path(top).resolve()).as_posix()
+    except ValueError:
+        return None
     if relative == ".":
         return None
     exclude = Path(git_path)
-    pattern = "/" + relative + "/"
-    existing = exclude.read_text(encoding="utf-8").splitlines() if exclude.is_file() else []
-    if pattern not in existing:
-        exclude.parent.mkdir(parents=True, exist_ok=True)
-        with exclude.open("a", encoding="utf-8") as fh:
-            fh.write(pattern + "\n")
+    if not exclude.is_absolute():
+        exclude = workspace / exclude  # git prints it relative to the -C directory
+    pattern = "/" + gitignore_escape(relative) + "/"
+    try:
+        existing = exclude.read_text(encoding="utf-8").splitlines() if exclude.is_file() else []
+        if pattern not in existing:
+            exclude.parent.mkdir(parents=True, exist_ok=True)
+            with exclude.open("a", encoding="utf-8") as fh:
+                fh.write(pattern + "\n")
+    except (OSError, UnicodeDecodeError):
+        return None
     return pattern
 
 
@@ -69,4 +91,6 @@ def init_workspace(workspace: Path, target_role: str = "") -> list[str]:
     pattern = exclude_from_git(workspace)
     if pattern:
         messages.append(f"workspace is inside a git repo; added {pattern} to .git/info/exclude")
+    elif inside_git_repo(workspace):
+        messages.append(NOT_EXCLUDED_WARNING)
     return messages

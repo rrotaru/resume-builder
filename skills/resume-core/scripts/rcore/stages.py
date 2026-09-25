@@ -1,7 +1,8 @@
-"""Stage lifecycle: begin into <stage>.tmp/, commit atomically, report freshness."""
+"""Stage lifecycle: begin into <stage>.tmp/, commit safely, report freshness."""
 from __future__ import annotations
 
 import hashlib
+import re
 import shutil
 from datetime import datetime, timezone
 from pathlib import Path
@@ -23,14 +24,36 @@ def tmp_dir(workspace: Path, stage: str) -> Path:
     return Path(workspace) / f"{stage}.tmp"
 
 
-def begin(workspace: Path, stage: str) -> Path:
-    """Create an empty <stage>.tmp/ (discarding any leftover) and return its path."""
+def _recover(workspace: Path, stage: str) -> None:
+    """Undo an interrupted swap: if <stage>/ is missing but <stage>.old/ exists, restore it."""
+    final, old = Path(workspace) / stage, Path(workspace) / f"{stage}.old"
+    if not final.exists() and old.is_dir():
+        old.rename(final)
+
+
+def begin(workspace: Path, stage: str, from_current: bool = False) -> Path:
+    """Create a fresh <stage>.tmp/ (discarding any leftover) and return its path.
+
+    With from_current, the tmp folder starts as a copy of the committed
+    <stage>/ without its _stage.json, so a skill can replace part of a stage
+    (for example one job's folder) and keep the rest.
+    """
     _check(stage)
+    _recover(workspace, stage)
     tmp = tmp_dir(workspace, stage)
     if tmp.exists():
         shutil.rmtree(tmp)
-    tmp.mkdir(parents=True)
+    current = Path(workspace) / stage
+    if from_current and current.is_dir():
+        shutil.copytree(current, tmp, ignore=lambda d, names: [META] if Path(d) == current else [])
+    else:
+        tmp.mkdir(parents=True)
     return tmp
+
+
+def _outside_workspace(rel: str) -> bool:
+    parts = re.split(r"[\\/]", rel)
+    return rel.startswith(("/", "\\")) or re.match(r"^[A-Za-z]:", rel) is not None or ".." in parts
 
 
 def hash_path(path: Path) -> str:
@@ -54,15 +77,21 @@ def _now() -> str:
 
 
 def commit(workspace: Path, stage: str, inputs: list[str], extra: dict | None = None) -> list[str]:
-    """Record input hashes, validate <stage>.tmp/, and swap it into place.
+    """Record input hashes, validate <stage>.tmp/, and swap it into place safely.
 
-    Returns a list of errors. On any error the previous <stage>/ is untouched.
+    inputs are workspace-relative paths. Returns a list of errors. On any
+    error the previous <stage>/ is untouched. If the swap is interrupted,
+    the next begin, commit or status restores the previous <stage>/.
     """
     _check(stage)
     workspace = Path(workspace)
+    _recover(workspace, stage)
     tmp = tmp_dir(workspace, stage)
     if not tmp.is_dir():
         return [f"{tmp.name}: not found; run begin first"]
+    outside = [rel for rel in inputs if _outside_workspace(rel)]
+    if outside:
+        return [f"input must be workspace-relative: {rel}" for rel in outside]
     missing = [rel for rel in inputs if not (workspace / rel).exists()]
     if missing:
         return [f"input not found: {rel}" for rel in missing]
@@ -96,11 +125,13 @@ def status(workspace: Path) -> dict[str, str]:
     """Map each stage to 'missing', 'fresh' or 'stale'.
 
     A stage is stale if an input's hash changed, an input is gone, or an
-    input lives in a stage that is itself stale.
+    input lives in a stage that is itself stale. Restores any stage left
+    as <stage>.old/ by an interrupted commit first.
     """
     workspace = Path(workspace)
     result: dict[str, str] = {}
     for stage in STAGES:
+        _recover(workspace, stage)
         meta_path = workspace / stage / META
         if not meta_path.is_file():
             result[stage] = "missing"
