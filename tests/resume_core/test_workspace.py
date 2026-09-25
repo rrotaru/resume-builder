@@ -10,6 +10,7 @@ def test_init_creates_valid_workspace(tmp_path):
     assert "created decisions/terms.json" in messages
     assert wsio.read_json(ws / "config.json")["target_role"] == "Staff Engineer"
     assert wsio.read_json(ws / "decisions" / "profile.json") == {}
+    assert wsio.read_json(ws / "decisions" / "wizard.json") == {"anchors": [], "skipped": []}
     assert validation.validate_workspace(ws) == []
 
 

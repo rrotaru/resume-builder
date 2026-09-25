@@ -1,3 +1,5 @@
+import pytest
+
 from rcore import profile, wsio
 
 
@@ -58,3 +60,31 @@ def test_missing_or_unreadable_files_count_as_empty(workspace, tmp_path):
     assert profile.effective_profile(workspace) == wsio.read_json(workspace / "03-profile" / "profile.json")
     wsio.write_json(workspace / "decisions" / "profile.json", ["not", "an", "object"])
     assert profile.effective_profile(workspace) == wsio.read_json(workspace / "03-profile" / "profile.json")
+
+
+def test_identity_and_describe_use_the_identity_fields():
+    job = {"name": "Tailspin Toys", "position": "Software Engineer", "startDate": "2019-06"}
+    assert profile.identity("work", job) == {"position": "Software Engineer", "name": "Tailspin Toys"}
+    assert profile.describe("work", job) == "Software Engineer, Tailspin Toys"
+    assert profile.identity("skills", {"keywords": ["Go"]}) == {}
+    assert profile.describe("skills", {"keywords": ["Go"]}) == "an entry with no name"
+    assert profile.identity("work", None) is None
+    assert profile.identity("profiles", {"network": "GitHub", "url": "x"}) == {"network": "GitHub"}
+
+
+def test_merged_arrays_are_the_sections_and_basics_profiles():
+    doc = {"basics": {"profiles": [{}], "name": "x"}, "work": [{}], "skills": [], "meta": {}}
+    assert [(pointer, section) for pointer, section, _ in profile.merged_arrays(doc)] == [
+        ("/work", "work"), ("/skills", "skills"), ("/basics/profiles", "profiles")]
+    assert list(profile.merged_arrays([])) == []
+
+
+@pytest.mark.parametrize("value, ok", [("2019", True), ("2019-06", True), ("2019-06-30", True),
+                                       ("2019-02-30", False), ("2019-13", False), ("June 2019", False),
+                                       ("19", False), (2019, False)])
+def test_is_date(value, ok):
+    assert profile.is_date(value) is ok
+
+
+def test_prose_fields():
+    assert profile.PROSE_FIELDS == {"summary", "description", "highlights", "reference"}

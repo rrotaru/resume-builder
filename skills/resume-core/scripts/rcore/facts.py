@@ -22,6 +22,8 @@ from __future__ import annotations
 
 import json
 
+from . import schema, wsio
+
 SECTIONS = ("work", "projects", "education", "certificates", "skills")
 DATE_FIELDS = ("startDate", "endDate", "date")
 # Entry fields that are bullets; the source and flags checks cover them.
@@ -132,3 +134,56 @@ def check(resume: dict, effective: dict, label: str) -> list[str]:
         if section in resume:
             errors += _check_entries(resume[section], effective.get(section), f"/{section}", section, label)
     return errors
+
+
+def _fields(spec: dict, node: dict) -> dict:
+    """The properties of a schema node, following a local $ref."""
+    if "$ref" in node:
+        node = spec["$defs"][node["$ref"].rsplit("/", 1)[-1]]
+    return node.get("properties", {})
+
+
+def fact_values(profile: dict) -> list[tuple[str, str]]:
+    """(JSON pointer, string) for every fact field of a profile that a tailored resume may copy.
+
+    The fields are those tailored-resume.schema.json allows in basics and in
+    the work, projects, education, certificates and skills entries, less the
+    bullets and source metadata (summary, highlights, x-highlights,
+    x-summary-sources). A keywords item is yielded with its own pointer
+    (/skills/0/keywords/2). Profile sections a tailored resume cannot hold,
+    and fields it cannot hold (description, courses), are left out.
+    """
+    spec = schema.load_schema("tailored-resume")
+    top = spec["properties"]
+    found: list[tuple[str, str]] = []
+
+    def strings(value, pointer: str) -> None:
+        found.extend(wsio.iter_strings(value, pointer))
+
+    basics = profile.get("basics")
+    if isinstance(basics, dict):
+        for field in _fields(spec, top["basics"]):
+            if field in BASICS_SKIP - {"label"} or field not in basics:
+                continue
+            if field == "location" and isinstance(basics[field], dict):
+                allowed = _fields(spec, top["basics"]["properties"]["location"])
+                for part, value in basics[field].items():
+                    if part in allowed:
+                        strings(value, f"/basics/location/{part}")
+            elif field == "profiles" and isinstance(basics[field], list):
+                allowed = _fields(spec, top["basics"]["properties"]["profiles"]["items"])
+                for i, item in enumerate(basics[field]):
+                    for part, value in (item.items() if isinstance(item, dict) else ()):
+                        if part in allowed:
+                            strings(value, f"/basics/profiles/{i}/{part}")
+            elif field not in ("location", "profiles"):
+                strings(basics[field], f"/basics/{field}")
+    for section in SECTIONS:
+        entries = profile.get(section)
+        if not isinstance(entries, list):
+            continue
+        allowed = [f for f in _fields(spec, top[section]["items"]) if f not in BULLET_FIELDS]
+        for i, entry in enumerate(entries):
+            for field in (f for f in allowed if isinstance(entry, dict) and f in entry):
+                strings(entry[field], f"/{section}/{i}/{field}")
+    return found

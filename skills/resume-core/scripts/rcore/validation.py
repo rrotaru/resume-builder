@@ -19,6 +19,7 @@ FILE_SCHEMAS: list[tuple[str, str, str]] = [
     ("decisions/metrics.json", "metrics", "json"),
     ("decisions/profile.json", "resume", "json"),
     ("decisions/attestations.json", "attestations", "json"),
+    ("decisions/wizard.json", "wizard-state", "json"),
     ("*/_stage.json", "stage", "json"),
     ("02-evidence/evidence.jsonl", "evidence", "jsonl"),
     ("03-profile/profile.json", "resume", "json"),

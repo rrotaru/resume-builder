@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Wizard bookkeeping (decisions/wizard.json)",
+  "description": "Written only by resume-wizard's answer.py. anchors: for each wizard answer inside an array of objects in decisions/profile.json, the identity of the imported entry it was given for (null when the answer added an entry past the imported end). skipped: questions the engineer declined; a skip inside an entry keeps that entry's identity and lapses when the entry changes.",
+  "type": "object",
+  "required": ["anchors", "skipped"],
+  "additionalProperties": false,
+  "properties": {
+    "anchors": {"type": "array", "items": {"$ref": "#/$defs/anchor"}},
+    "skipped": {"type": "array", "items": {"$ref": "#/$defs/skip"}}
+  },
+  "$defs": {
+    "identity": {"type": ["object", "null"], "additionalProperties": {"type": "string"}},
+    "anchor": {
+      "type": "object",
+      "required": ["entry", "answered_for"],
+      "additionalProperties": false,
+      "properties": {
+        "entry": {"type": "string", "pattern": "^/(basics/profiles|[A-Za-z]+)/(0|[1-9][0-9]*)$"},
+        "answered_for": {"$ref": "#/$defs/identity"}
+      }
+    },
+    "skip": {
+      "type": "object",
+      "required": ["question"],
+      "additionalProperties": false,
+      "properties": {
+        "question": {"type": "string", "pattern": "^(profile:/.+|metric:pj_[0-9a-f]{8})$"},
+        "answered_for": {"$ref": "#/$defs/identity"}
+      }
+    }
+  }
+}

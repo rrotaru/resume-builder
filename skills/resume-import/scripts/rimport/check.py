@@ -27,31 +27,12 @@ import re
 from pathlib import Path
 
 from rcore import validation, wsio
+from rcore.profile import ARRAY_FIELDS, BASICS, DATE_FIELDS, LOCATION, PROFILE_ITEM, SECTIONS
 
 from . import jsonresume
 from .dates import finest, is_iso_date, stated_dates
 from .match import appears, normalize
 
-BASICS = ("name", "label", "image", "email", "phone", "url", "summary", "location", "profiles")
-LOCATION = ("address", "postalCode", "city", "countryCode", "region")
-PROFILE_ITEM = ("network", "username", "url")
-SECTIONS = {
-    "work": ("name", "position", "url", "location", "description", "startDate", "endDate",
-             "summary", "highlights"),
-    "volunteer": ("organization", "position", "url", "startDate", "endDate", "summary", "highlights"),
-    "education": ("institution", "url", "area", "studyType", "startDate", "endDate", "score", "courses"),
-    "awards": ("title", "date", "awarder", "summary"),
-    "certificates": ("name", "date", "issuer", "url"),
-    "publications": ("name", "publisher", "releaseDate", "url", "summary"),
-    "skills": ("name", "level", "keywords"),
-    "languages": ("language", "fluency"),
-    "interests": ("name", "keywords"),
-    "references": ("name", "reference"),
-    "projects": ("name", "description", "highlights", "keywords", "startDate", "endDate", "url",
-                 "roles", "entity", "type"),
-}
-ARRAY_FIELDS = frozenset({"highlights", "keywords", "courses", "roles"})
-DATE_FIELDS = frozenset({"startDate", "endDate", "date", "releaseDate"})
 URL_FIELDS = frozenset({"url", "image"})
 OPEN_SECTIONS = frozenset({"work", "volunteer", "education", "projects"})
 ONGOING = re.compile(r"(?<![^\W_])(?:present|current|currently|now|today|ongoing|to\s+date|since)(?![^\W_])")
