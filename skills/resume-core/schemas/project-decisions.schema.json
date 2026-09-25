@@ -8,15 +8,17 @@
     "additionalProperties": false,
     "properties": {
       "project_id": {"type": "string", "pattern": "^pj_[0-9a-f]{8}$"},
-      "action": {"enum": ["exclude", "merge", "split", "rename", "set_role", "set_scope"]},
+      "action": {"enum": ["exclude", "merge", "split", "rename", "set_role", "set_scope", "set_rank"]},
       "merge_with": {"type": "array", "items": {"type": "string", "pattern": "^pj_[0-9a-f]{8}$"}},
       "split_groups": {
         "type": "array",
         "items": {"type": "array", "items": {"type": "string", "pattern": "^ev_[0-9a-f]{8}([0-9a-f]{4})?$"}}
       },
-      "name": {"type": "string"},
+      "name": {"type": "string", "minLength": 1},
+      "summary": {"type": "string", "minLength": 1},
       "role": {"enum": ["lead", "core", "supporting"]},
       "scope": {"enum": ["team", "cross-team", "org", "company"]},
+      "rank": {"type": "integer", "minimum": 1},
       "evidence_ids": {
         "type": "array",
         "items": {"type": "string", "pattern": "^ev_[0-9a-f]{8}([0-9a-f]{4})?$"}

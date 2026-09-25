@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "The model's project groups before decisions (04-projects/groups.json)",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "required": ["id", "internal_name", "summary", "evidence_ids", "role", "scope", "rank", "rank_reasons"],
+    "additionalProperties": false,
+    "properties": {
+      "id": {"type": "string", "pattern": "^pj_[0-9a-f]{8}$"},
+      "internal_name": {"type": "string", "minLength": 1},
+      "summary": {"type": "string", "minLength": 1},
+      "evidence_ids": {
+        "type": "array", "minItems": 1,
+        "items": {"type": "string", "pattern": "^ev_[0-9a-f]{8}([0-9a-f]{4})?$"}
+      },
+      "role": {"enum": ["lead", "core", "supporting"]},
+      "scope": {"enum": ["team", "cross-team", "org", "company"]},
+      "rank": {"type": "integer", "minimum": 1},
+      "rank_reasons": {"type": "array", "items": {"type": "string", "minLength": 1}}
+    }
+  }
+}

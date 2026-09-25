@@ -12,6 +12,8 @@ def test_schema_for_maps_paths():
     assert validation.schema_for("08-ats/jobs/acme/flags.json") == ("flags", "json")
     assert validation.schema_for("06-bullets.tmp/bullets.json") == ("bullets", "json")
     assert validation.schema_for("04-projects/_stage.json") == ("stage", "json")
+    assert validation.schema_for("04-projects.tmp/signals.json") == ("signals", "json")
+    assert validation.schema_for("04-projects/groups.json") == ("project-groups", "json")
     assert validation.schema_for("08-ats/jobs/a/b/flags.json") is None
     assert validation.schema_for("01-raw/github.jsonl") is None
 
