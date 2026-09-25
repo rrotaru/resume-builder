@@ -303,7 +303,7 @@ Every checkpoint persists its choices to `decisions/`, so an interrupted run res
 
 ## Follow-up specs
 
-Each gets its own spec → plan → implementation cycle, in this order. Render comes early so the pipeline produces a real document from fixtures as soon as possible.
+Each gets its own spec → plan → implementation cycle, in this order. Progress, and the requirements each piece inherits, are tracked in the [roadmap](../../ROADMAP.md). Render comes early so the pipeline produces a real document from fixtures as soon as possible.
 
 1. **resume-core** and **resume-init:** schemas, the `rcore` library, `validate.py`, `stage.py`, the three checks, workspace creation, fixture workspace, skill lint, CI.
 2. **resume-render:** template, PDF/DOCX/TXT output, render tests ([spec](2026-09-25-resume-render-design.md)).

@@ -3,6 +3,7 @@ Discover your most impactful work and prove the value you have delivered.
 
 A Claude Code plugin of portable agent skills that builds an evidence-backed engineering resume.
 Design: [architecture spec](docs/superpowers/specs/2026-09-24-resume-builder-architecture-design.md).
+Progress and what to build next: [roadmap](docs/ROADMAP.md).
 
 ## Development
 
