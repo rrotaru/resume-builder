@@ -128,3 +128,26 @@ def test_unreadable_files_are_reported_not_raised(workspace):
                                   "Fintech-SRE", "-x", "", "a/b"])
 def test_job_slug_must_be_a_single_plain_name(workspace, slug):
     assert flags.check_job(workspace, slug) == [f"{slug}: job slug must be a single plain name"]
+
+
+def test_summary_added_after_the_claim_diff_fails(workspace):
+    resume = wsio.read_json(workspace / RESUME)
+    resume["basics"]["summary"] = "Invented distributed consensus"
+    resume["basics"]["x-summary-sources"] = ["ev_191cc8ce"]
+    wsio.write_json(workspace / RESUME, resume)
+    assert flags.check_job(workspace, JOB) == [
+        "08-ats/jobs/fintech-sre: summary changed after the claim diff; re-run the claim diff"
+    ]
+
+
+def test_summary_recorded_by_the_claim_diff_passes(workspace):
+    resume = wsio.read_json(workspace / RESUME)
+    summary = "Backend engineer focused on payments latency"
+    resume["basics"]["summary"] = summary
+    resume["basics"]["x-summary-sources"] = ["ev_191cc8ce"]
+    wsio.write_json(workspace / RESUME, resume)
+    path = workspace / f"08-ats/jobs/{JOB}/flags.json"
+    data = wsio.read_json(path)
+    data["checked"]["summary"] = ids.text_sha256(summary)
+    wsio.write_json(path, data)
+    assert flags.check_job(workspace, JOB) == []

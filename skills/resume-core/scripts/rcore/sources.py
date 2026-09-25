@@ -96,9 +96,15 @@ def source_error(ref: str, known: KnownSources) -> str | None:
 
 def check_bullets(bullets: list[dict], known: KnownSources, label: str) -> list[str]:
     errors = []
-    for bullet in bullets:
+    for i, bullet in enumerate(bullets):
+        if not isinstance(bullet, dict):
+            errors.append(f"{label}: record {i}: must be an object")
+            continue
         where = f"{label}: bullet {bullet.get('id')}"
         refs = bullet.get("sources") or []
+        if not isinstance(refs, list):
+            errors.append(f"{where}: sources must be a list")
+            continue
         if not refs:
             errors.append(f"{where}: has no sources")
         for ref in refs:
@@ -128,7 +134,7 @@ def check_resume(resume: dict, known: KnownSources, label: str,
     errors = []
     for section in ("work", "projects"):
         for i, entry in enumerate(resume.get(section, [])):
-            texts = [h.get("text") for h in entry.get("x-highlights", [])]
+            texts = [h.get("text") if isinstance(h, dict) else h for h in entry.get("x-highlights", [])]
             if entry.get("highlights", []) != texts:
                 errors.append(f"{label}: /{section}/{i}: highlights do not match x-highlights")
     for section in ("education", "certificates", "skills"):
@@ -144,7 +150,7 @@ def check_resume(resume: dict, known: KnownSources, label: str,
     if isinstance(basics, dict) and "summary" in basics:
         bullets.append({"id": "summary", "sources": basics.get("x-summary-sources")})
     bullets += [
-        {"id": h.get("bullet_id"), "sources": h.get("sources")}
+        {"id": h.get("bullet_id"), "sources": h.get("sources")} if isinstance(h, dict) else h
         for _, h in wsio.resume_highlights(resume)
     ]
     return errors + check_bullets(bullets, known, label)

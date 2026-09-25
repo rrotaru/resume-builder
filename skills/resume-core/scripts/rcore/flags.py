@@ -16,6 +16,9 @@ ATTESTATIONS = "decisions/attestations.json"
 _SLUG = re.compile(r"[a-z0-9][a-z0-9-]*")
 
 
+SUMMARY_ID = "summary"  # basics.summary is diffed like a bullet under this id
+
+
 def _load(workspace: Path, rel: str, schema_name: str) -> tuple[object, list[str]]:
     data, error = wsio.load(workspace, rel)
     if error:
@@ -53,6 +56,9 @@ def check_job(workspace: Path, job: str) -> list[str]:
     errors += [f"{label}: {b} appears more than once in resume.json"
                for b, n in counts.items() if n > 1]
     texts = {h["bullet_id"]: h["text"] for h in highlights}
+    summary = resume.get("basics", {}).get("summary")
+    if isinstance(summary, str):
+        texts[SUMMARY_ID] = summary
     attested = {(a["job_slug"], a["bullet_id"], a["text_sha256"]) for a in attestations}
     flagged = {f["bullet_id"]: f for f in data["flags"]}
     checked = data["checked"]

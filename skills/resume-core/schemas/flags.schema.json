@@ -17,7 +17,7 @@
         "required": ["bullet_id", "text", "text_sha256", "reasons"],
         "additionalProperties": false,
         "properties": {
-          "bullet_id": {"type": "string", "pattern": "^b_[A-Za-z0-9_-]+$"},
+          "bullet_id": {"type": "string", "pattern": "^(b_[A-Za-z0-9_-]+|summary)$"},
           "text": {"type": "string", "minLength": 1},
           "text_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
           "reasons": {"type": "array", "minItems": 1, "items": {"type": "string"}}

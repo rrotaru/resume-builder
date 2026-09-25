@@ -166,3 +166,18 @@ def test_commit_rejects_an_input_that_resolves_to_the_workspace_root(workspace):
     assert stages.commit(workspace, "06-bullets", ["root-link"]) == [
         "input must be workspace-relative: root-link"
     ]
+
+
+def test_input_spelling_is_normalized_so_staleness_propagates(workspace):
+    for stage, inputs in [("04-projects", ["02-evidence"]), ("06-bullets", ["./04-projects"])]:
+        tmp = stages.begin(workspace, stage)
+        for f in (workspace / stage).iterdir():
+            if f.name != "_stage.json":
+                (tmp / f.name).write_bytes(f.read_bytes())
+        assert stages.commit(workspace, stage, inputs) == []
+    assert list(wsio.read_json(workspace / "06-bullets" / "_stage.json")["inputs"]) == ["04-projects"]
+    evidence = workspace / "02-evidence" / "evidence.jsonl"
+    evidence.write_text(evidence.read_text() + "\n")
+    status = stages.status(workspace)
+    assert status["04-projects"] == "stale"
+    assert status["06-bullets"] == "stale"

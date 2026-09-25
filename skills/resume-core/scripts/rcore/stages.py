@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hashlib
+import posixpath
 import re
 import shutil
 from datetime import datetime, timezone
@@ -81,6 +82,11 @@ def _now() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def _normalize_input(rel: str) -> str:
+    """Canonical workspace-relative spelling, so ./04-projects records as 04-projects."""
+    return posixpath.normpath(rel.replace("\\", "/"))
+
+
 def commit(workspace: Path, stage: str, inputs: list[str], extra: dict | None = None) -> list[str]:
     """Record input hashes, validate <stage>.tmp/, and swap it into place safely.
 
@@ -97,6 +103,7 @@ def commit(workspace: Path, stage: str, inputs: list[str], extra: dict | None = 
     outside = [rel for rel in inputs if _outside_workspace(workspace, rel)]
     if outside:
         return [f"input must be workspace-relative: {rel}" for rel in outside]
+    inputs = [_normalize_input(rel) for rel in inputs]
     missing = [rel for rel in inputs if not (workspace / rel).exists()]
     if missing:
         return [f"input not found: {rel}" for rel in missing]
@@ -143,7 +150,7 @@ def status(workspace: Path) -> dict[str, str]:
             continue
         state = "fresh"
         for rel, digest in wsio.read_json(meta_path)["inputs"].items():
-            upstream = rel.split("/", 1)[0]
+            upstream = _normalize_input(rel).split("/", 1)[0]
             path = workspace / rel
             if result.get(upstream) == "stale" or not path.exists() or hash_path(path) != digest:
                 state = "stale"

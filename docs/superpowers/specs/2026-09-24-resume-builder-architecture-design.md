@@ -206,7 +206,7 @@ This is the only input to rendering. `report.json` holds ATS lint results and ke
  "flags": [{"bullet_id": "b_1", "text": "...", "text_sha256": "...", "reasons": ["..."]}]}
 ```
 
-`checked` holds the hash of every bullet the claim diff examined, flagged or not; `flags` lists rewrites whose claims are not supported by their sources. `check_flags.py` passes a bullet in the job's `resume.json` only if its current text hash is attested for that job, or it is unflagged and `checked` holds its current hash. A flagged bullet whose hash matches the flag must be accepted, reverted or edited. Any other bullet changed after the claim diff, which must be re-run. A flag or `checked` entry for a bullet no longer in `resume.json`, or a `bullet_id` used twice in one resume, is an error.
+`checked` holds the hash of every bullet the claim diff examined, flagged or not; `flags` lists rewrites whose claims are not supported by their sources. `check_flags.py` passes a bullet in the job's `resume.json` only if its current text hash is attested for that job, or it is unflagged and `checked` holds its current hash. A flagged bullet whose hash matches the flag must be accepted, reverted or edited. Any other bullet changed after the claim diff, which must be re-run. A flag or `checked` entry for a bullet no longer in `resume.json`, or a `bullet_id` used twice in one resume, is an error. A `basics.summary` in a job resume goes through the same rules under the id `summary`, so the claim diff must examine it too.
 
 ## Skills
 

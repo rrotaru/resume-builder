@@ -248,3 +248,11 @@ def test_profile_exemption_is_case_exact(workspace):
     assert not _is_tailored("./07-sanitized/profile.json")
     assert _is_tailored("03-PROFILE/profile.json")
     assert _is_tailored("08-ats/jobs/fintech-sre/resume.json")
+
+
+def test_non_object_bullet_records_are_reported_not_raised(workspace):
+    wsio.write_json(workspace / "06-bullets" / "bullets.json", [1, {"id": "b_1", "sources": "ev_191cc8ce"}])
+    assert sources.check_file(workspace, "06-bullets/bullets.json") == [
+        "06-bullets/bullets.json: record 0: must be an object",
+        "06-bullets/bullets.json: bullet b_1: sources must be a list",
+    ]
