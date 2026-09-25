@@ -94,7 +94,7 @@ resume-workspace/
   04-projects/           # resume-analyze: projects.json, signals.json
   05-terms/              # resume-sanitize scan: candidates.json
   06-bullets/            # resume-write: bullets.json, stories.md
-  07-sanitized/          # resume-sanitize apply: bullets.json, profile.json, new-terms.json
+  07-sanitized/          # resume-sanitize apply: bullets.json, profile.json, stories.md, new-terms.json
   08-ats/
     general/             # resume.json, report.json
     jobs/<slug>/         # jd.txt, resume.json, report.json, flags.json
@@ -142,7 +142,7 @@ All files are JSON or JSONL and validated against `resume-core/schemas`.
 
 ### Profile (`03-profile/profile.json`)
 
-[JSON Resume](https://jsonresume.org/schema) with an added `x-sources` array on each entry (for example `["resume:/work/2"]`). Values in `decisions/profile.json` take precedence over imported values.
+[JSON Resume](https://jsonresume.org/schema) with an added `x-sources` array on each entry (for example `["resume:/work/2"]`). Values in `decisions/profile.json` take precedence over imported values. The two are combined as the *effective profile*: objects merge key by key, arrays of objects merge by index (`{}` leaves an imported entry unchanged, extra entries are added), other arrays such as `keywords` combine, and any other wizard value replaces the imported one.
 
 ### Project (`04-projects/projects.json`)
 
@@ -190,12 +190,13 @@ JSON Resume restricted to a closed list of sections, validated by `tailored-resu
 - `education`, `certificates` and `skills` entries carry no `highlights`.
 - If `basics.summary` is present, `basics.x-summary-sources` must be present and non-empty; the source check treats the summary as a bullet with id `summary`.
 - Every object is closed to an allowlist of fields (`additionalProperties: false`), so no unsourced claim can ride along in a field the checks do not read:
-  - `basics`: `name`, `label`, `email`, `phone`, `url`, `location`, `profiles`, `summary`, `x-summary-sources`, `x-sources`; `location`: `address`, `postalCode`, `city`, `countryCode`, `region`; each `profiles` item: `network`, `username`, `url`.
-  - `work` and `projects` entries: `name`, `position`, `url`, `location`, `startDate`, `endDate`, `highlights`, `x-highlights`, `x-sources`. There is no `summary` or `description`: claims belong in sourced highlights.
-  - `education` entries: `institution`, `url`, `area`, `studyType`, `startDate`, `endDate`, `score`, `x-sources`.
-  - `certificates` entries: `name`, `date`, `issuer`, `url`, `x-sources`.
-  - `skills` entries: `name`, `level`, `keywords`, `x-sources`.
-- `basics.label`, when present, must equal `config.json` `target_role` or `03-profile/profile.json` `basics.label`. The source check enforces this for tailored resumes and reports `<file>: basics.label must match the target role in config.json or the imported profile's label`.
+  - `basics`: `name`, `label`, `email`, `phone`, `url`, `location`, `profiles`, `summary`, `x-summary-sources`; `location`: `address`, `postalCode`, `city`, `countryCode`, `region`; each `profiles` item: `network`, `username`, `url`.
+  - `work` and `projects` entries: `name`, `position`, `url`, `location`, `startDate`, `endDate`, `highlights`, `x-highlights`. There is no `summary` or `description`: claims belong in sourced highlights.
+  - `education` entries: `institution`, `url`, `area`, `studyType`, `startDate`, `endDate`, `score`.
+  - `certificates` entries: `name`, `date`, `issuer`, `url`.
+  - `skills` entries: `name`, `level`, `keywords`.
+- `basics.label`, when present, must equal `config.json` `target_role` or the effective profile's `basics.label`. The source check enforces this for tailored resumes and reports `<file>: basics.label must match the target role in config.json or the profile's label`.
+- Every other field that is not a bullet (name, contact details, employer, title, dates, degree, certificate, skill keywords) is a *fact field* and must be copied from the effective profile. Each entry must match one profile entry field for field; dates may be shortened but not lengthened, and a date the profile entry has cannot be dropped. The source check enforces this, so entries carry no `x-sources`. See the [resume-render spec](2026-09-25-resume-render-design.md#fact-fields).
 
 This is the only input to rendering. `report.json` holds ATS lint results and keyword coverage.
 
@@ -231,13 +232,13 @@ Checks for `uv` and walks the engineer through installing it if missing. uv supp
 
 ### resume-sanitize
 - **Scan** (before the wizard): finds candidate sensitive terms in projects, evidence excerpts and the profile, and proposes generalizations into `05-terms/candidates.json`.
-- **Apply** (after write): applies `decisions/terms.json` to bullets and profile, writing `07-sanitized/`. Newly detected terms go to `new-terms.json` for checkpoint 4.
+- **Apply** (after write): applies `decisions/terms.json` to bullets, stories and the profile's prose (highlights, summary), writing `07-sanitized/` including `stories.md`. It leaves profile fact fields (names, titles, dates) unchanged: a denied term in one is replaced by a wizard answer at that path in `decisions/profile.json`. Newly detected terms go to `new-terms.json` for checkpoint 4.
 - **Terms check** (`check_terms.py`, used here and by render) matches strictly. Terms and text are both normalized: Unicode NFKC, every format character (category `Cf`, which includes zero-width characters and the soft hyphen), the rest of the Default_Ignorable_Code_Point set (U+034F, U+115F–1160, U+17B4–17B5, U+180B–180F, U+3164, U+FE00–FE0F, U+FFA0, U+1BCA0–1BCA3, U+1D173–1D17A, U+E0000–E0FFF) and the Braille blank U+2800 removed, then case-folded. A term's words may be separated by any run of whitespace, `_`, dash punctuation (category `Pd`), U+2212 minus, `.`, `/`, `\`, U+00B7 middle dot, U+2215, U+2044, U+2027, U+2043, U+02D7, U+30FB or U+2022, or by nothing, so `Project Falcon` also matches `Project-Falcon`, `Project—Falcon`, `Project.Falcon`, `ProjectFalcon` and a term broken across a line. For terms of 5 or more characters (not counting separators) an optional plural `s`/`es` still matches (`Falcons`), but a longer word does not (`Falconry`); shorter terms get no plural, so `Rat` does not flag `rates`. Text files are scanned as one string and each match is reported with the line where it starts, counting lines as `str.splitlines()` does. The check fails closed: a missing or invalid `decisions/terms.json` is an error.
 - **Allowed terms win.** An allowed term (`replacement: null`) exempts a denied match when the allowed term matches a span of the normalized text that fully contains the denied match. Allowed terms match literally: normalized and case-insensitive, whole-word, with no separator flexibility and no plural. So with `Check Point` denied and `checkpoint` allowed, "Added a checkpoint" passes and "Worked at Check Point" is still flagged. The engineer resolves a false positive by adding an allowed term or by rewording; the check itself is never weakened. Because allowed terms match literally, the engineer adds plural forms (`checkpoints`) as separate allowed terms. An allowed term may not equal a denied term or contain one as a whole word (both normalized, separator runs as single spaces): with `Contoso` denied, allowing `Contoso Bank` is an error in `decisions/terms.json`, so an allowed term can fix a false positive but never leak a denied name.
-- **Known limits:** homoglyphs (for example a Cyrillic `о` in `Cоntoso`) are not detected by the terms check. The engineer's review at checkpoint 4 is the backstop. An allowed term that joins a denied term's words or adds a plural (`ContosoBank` or `contoso-banks` allowed beside denied `Contoso Bank`) exempts every literal use of itself, so it could let the denied name through; `check_terms.py` prints a notice for each such pair and the engineer confirms at checkpoint 4 that it is a different word. Besides that, `work[].position`, `basics.name`, `certificates[].name` and `skills[].keywords` are free strings that the source check does not verify; the resume-ats and resume-render specs must constrain them (`position` must match the imported profile or the wizard answers).
+- **Known limits:** homoglyphs (for example a Cyrillic `о` in `Cоntoso`) are not detected by the terms check. The engineer's review at checkpoint 4 is the backstop. An allowed term that joins a denied term's words or adds a plural (`ContosoBank` or `contoso-banks` allowed beside denied `Contoso Bank`) exempts every literal use of itself, so it could let the denied name through; `check_terms.py` prints a notice for each such pair and the engineer confirms at checkpoint 4 that it is a different word. Fact fields such as `work[].position`, `basics.name`, `certificates[].name` and `skills[].keywords` are checked against the profile, not against evidence: the check proves a fact was copied from the profile, not that the profile is right.
 
 ### resume-wizard (checkpoint 3)
-A single session for: metric values for `metric_prompt` projects, missing profile fields (contact details, dates, education), and term approvals from `05-terms/candidates.json`. Writes only to `decisions/`. Skips items already answered in earlier runs.
+A single session for: metric values for `metric_prompt` projects, missing profile fields (contact details, dates, education), and term approvals from `05-terms/candidates.json`, including a replacement value for any profile fact field that holds a denied term. Writes only to `decisions/`; profile answers follow the effective-profile rules (arrays of objects merge by index, `{}` keeps an imported entry). Skips items already answered in earlier runs.
 
 ### resume-write
 Writes XYZ bullets per project: `xyz_quantified` when a confirmed metric exists, otherwise `xyz`. Writes STAR stories for top-N projects to `06-bullets/stories.md` using the same sources. Earlier roles' bullets come from the imported resume. Every bullet has a non-empty `sources`.
@@ -248,9 +249,10 @@ Writes XYZ bullets per project: `xyz_quantified` when a confirmed metric exists,
 - `ats_lint.py` handles the checks that don't need judgment (headings, dates, no tables or columns in the template).
 
 ### resume-render
-1. Runs `check_terms.py`, `check_sources.py`, and (for job versions) `check_flags.py`. Any failure means no output, and a list of failing records with the command that fixes each.
-2. Fills `templates/classic.html` and prints the PDF via Playwright/Chromium. Builds the DOCX via `python-docx` with the same section order, and the TXT. Renders only the tailored resume's sections (`basics`, `work`, `projects`, `education`, `certificates`, `skills`); `highlights` render only for `work` and `projects`, and the summary only when it is sourced.
-3. Copies `stories.md` to `out/`.
+Detailed in the [resume-render spec](2026-09-25-resume-render-design.md).
+1. `render.py` runs the checks itself: `validate.py` on every file it reads (stopping there on any failure), then the name precondition, `check_sources.py` (with fact fields), `check_terms.py` (resumes and `07-sanitized/stories.md`) and, for job versions, `check_flags.py`. Any failure means no output, and a list of failing records with the command that fixes each.
+2. Builds a render model from a fixed list of sections and fields, in a fixed order (Summary when sourced, Experience, Projects, Skills, Education, Certifications), fills `templates/classic.html` from it and prints the PDF via Playwright/Chromium. Builds the DOCX via `python-docx` and the TXT from the same model. Then checks that each file's text still holds every heading and bullet and no denied term.
+3. Copies `07-sanitized/stories.md` to `out/`. It never copies `06-bullets/stories.md`, which is written before sanitizing.
 
 If Chromium is unavailable, offers to install it. DOCX and TXT still render without it.
 
@@ -304,7 +306,7 @@ Every checkpoint persists its choices to `decisions/`, so an interrupted run res
 Each gets its own spec → plan → implementation cycle, in this order. Render comes early so the pipeline produces a real document from fixtures as soon as possible.
 
 1. **resume-core** and **resume-init:** schemas, the `rcore` library, `validate.py`, `stage.py`, the three checks, workspace creation, fixture workspace, skill lint, CI.
-2. **resume-render:** template, PDF/DOCX/TXT output, render tests.
+2. **resume-render:** template, PDF/DOCX/TXT output, render tests ([spec](2026-09-25-resume-render-design.md)).
 3. **resume-import:** text extraction and profile mapping.
 4. **resume-collect:** connector discovery, normalizers, git log, reviews, linking.
 5. **resume-analyze:** signals, grouping, role and scope, ranking, ID continuity.

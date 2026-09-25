@@ -25,7 +25,7 @@ Follow `../resume-core/SKILL.md` for workspace conventions.
    Show the engineer every problem line with the `fix:` line under it, then stop.
    Never edit `08-ats/`, `decisions/` or any other stage folder to make a check pass, and never skip or weaken a check.
    Render again after the engineer has run the fixes.
-4. If it exits 3, Chromium is not installed and nothing was written. Tell the engineer that installing downloads about 150 MB into Playwright's browser cache, outside the workspace, and offer two choices:
+4. If it exits 3, Chromium is not installed (or did not start) and nothing was written. Tell the engineer that installing downloads about 150 MB into Playwright's browser cache, outside the workspace, and offer two choices:
    - Install: `uv run scripts/render.py --install-browser`, then render again.
    - Continue without a PDF: add `--no-pdf` to write only the DOCX and TXT files.
    If Chromium is installed but fails to start on Linux, try `--install-browser --with-deps`, which also installs the system libraries (it may ask for an administrator password).

@@ -1,7 +1,7 @@
 # resume-render: Design
 
 - **Date:** 2026-09-25
-- **Status:** Draft
+- **Status:** Approved
 - **Scope:** The `resume-render` skill: the checks it runs before writing anything, the HTML template, and PDF, DOCX and plain-text output. Also the resume-core changes render needs to close three gaps resume-core left open. Follow-up spec 2 of the [architecture spec](2026-09-24-resume-builder-architecture-design.md).
 
 ## Goal
@@ -34,7 +34,7 @@ Each gap below was reproduced on a copy of `tests/fixtures/workspace/`.
 | PDF | Playwright Chromium with JavaScript off and every network request blocked. US Letter by default, `--paper a4` for A4. |
 | Output check | After rendering, the text extracted from each PDF, DOCX and TXT must contain every heading and bullet in order and must pass the terms check. |
 | Stories | Copied from `07-sanitized/stories.md`, which sanitize apply must write. `06-bullets/stories.md` is never copied because it is written before sanitizing. |
-| No Chromium | Exit code 3, nothing written. The skill offers `render.py --install-browser`, or `--no-pdf` to write DOCX and TXT only. |
+| No Chromium | Exit code 3, nothing written, when Chromium is missing or does not start. The skill offers `render.py --install-browser`, or `--no-pdf` to write DOCX and TXT only. |
 
 ## Skill layout
 
@@ -43,7 +43,7 @@ skills/resume-render/
   SKILL.md
   scripts/
     render.py              # CLI: gate, render, output check, stage commit
-    rrender/               # model.py, html.py, docx.py, txt.py, dates.py
+    rrender/               # gate.py, model.py, dates.py, txt.py, html.py, pdf.py, docx.py, outcheck.py
   templates/
     classic.html
     fonts/                 # Carlito Regular and Bold (WOFF2), OFL.txt
@@ -52,7 +52,7 @@ skills/resume-core/scripts/rcore/
   facts.py                 # new: fact-field rules, called from sources.check_resume
 ```
 
-`render.py` declares pinned `jinja2`, `playwright`, `python-docx` and `pypdf` in its PEP 723 block. It imports `rcore` as portability rule 6 allows. The check code stays standard-library only.
+`render.py` declares pinned `jinja2`, `playwright`, `python-docx` and `pypdf` in its PEP 723 block. It imports `rcore` as portability rule 6 allows. The check code stays standard-library only, and so do `gate.py`, `model.py`, `dates.py`, `txt.py` and `outcheck.py`, so their tests run without the render dependencies.
 
 ## Command line
 
@@ -66,7 +66,7 @@ uv run scripts/render.py --install-browser [--with-deps]
 | 0 | Rendered, or `--check` passed |
 | 1 | A check failed, or there is nothing to render. Nothing written. |
 | 2 | Usage error |
-| 3 | Chromium is not installed. Nothing written. |
+| 3 | Chromium is not installed or did not start. Nothing written. |
 
 Target `general` is `08-ats/general/resume.json`. Target `<slug>` is `08-ats/jobs/<slug>/resume.json`. Without `--target`, render takes `general` if that file exists, plus every folder in `08-ats/jobs/`. With no targets it exits 1 with `nothing to render; run /resume-builder:ats`. A job folder missing `resume.json` or `flags.json` fails the gate, so a half-built job version is never skipped silently.
 
@@ -79,7 +79,7 @@ Target `general` is `08-ats/general/resume.json`. Target `<slug>` is `08-ats/job
 5. Copy stories (see [Stories](#stories)).
 6. Run the output check.
 7. Hash the inputs again. If any changed, delete `out.tmp/` and exit 1 with `inputs changed during render; run render again`.
-8. `stages.commit(ws, "out", inputs, extra={"targets": [...], "pdf": true, "pages": {"general": 1, ...}})`.
+8. `stages.commit(ws, "out", inputs, extra={"targets": [...], "pdf": true, "pages": {"general": 1, ...}, "stories": true})`.
 
 Inputs are each target's `resume.json` (and `flags.json` for jobs), plus each of these that exists: `config.json`, `decisions/terms.json`, `decisions/profile.json`, `decisions/metrics.json`, `decisions/attestations.json`, `02-evidence/evidence.jsonl`, `03-profile/profile.json` and `07-sanitized/stories.md`. `commit` rejects inputs that do not exist, so missing optional files are left out.
 
@@ -147,7 +147,7 @@ The fixture's tailored resumes pass these rules once `x-sources` is removed from
 
 ### Error lines
 
-The closest profile entry is the one with the most matching fact fields, taking the lowest index on a tie. Each field that differs from it gets its own line:
+The closest profile entry is the one with the fewest differences, taking the lowest index on a tie. Each difference gets its own line:
 
 ```
 08-ats/jobs/fintech-sre/resume.json: /work/0: position 'CTO' does not match the profile (closest entry /work/0 has 'Senior Software Engineer')
@@ -204,12 +204,12 @@ python-docx writes the same order and text as the render model. The name is a bo
 
 ### Plain text
 
-UTF-8 with LF line endings, one line per bullet and no wrapping. Headings are in capitals. The renderer's own punctuation is ASCII: ` - ` in date ranges, ` | ` between contact items and `- ` before bullets. Content keeps its own characters. The output is deterministic, so tests compare it byte for byte with a saved copy. For the fixture's general resume:
+UTF-8 with LF line endings, one line per bullet and no wrapping. Headings are in capitals. The renderer's own punctuation is ASCII: ` - ` in date ranges, ` | ` between contact items and `- ` before bullets. Content keeps its own characters. The output is deterministic, so tests compare it byte for byte with a saved copy. For the fixture's general resume (`tests/fixtures/render/general.txt`):
 
 ```
 Jordan Rivera
 Senior Backend Engineer
-jordan.rivera@example.com | Denver, CO
+jordan.rivera@example.com | https://github.com/jrivera | Denver, CO
 
 EXPERIENCE
 
@@ -222,6 +222,12 @@ Software Engineer, Tailspin Toys
 Jun 2019 - Dec 2022
 - Migrated the order service from PHP to Go, serving 2M requests per day
 
+PROJECTS
+
+ledger-lint
+Apr 2021 - Present | https://github.com/jrivera/ledger-lint
+- Built ledger-lint, an open-source linter for double-entry ledger files with 300 GitHub stars
+
 SKILLS
 
 Backend: Go, Python, Redis, PostgreSQL
@@ -230,13 +236,18 @@ EDUCATION
 
 BS, Computer Science, State University
 2019
+
+CERTIFICATIONS
+
+AWS Certified Solutions Architect - Associate, Amazon Web Services
+May 2024
 ```
 
 ## Output check
 
 Before committing, render checks each target's three files:
 
-1. It extracts the text of the PDF with pypdf and of the DOCX with python-docx, and reads the TXT. It collapses every run of whitespace to one space.
+1. It extracts the text of the PDF with pypdf and of the DOCX with python-docx, and reads the TXT. The comparison ignores whitespace and case, so line wrapping in the PDF and capital headings in the TXT do not matter.
 2. The name, every heading and every bullet in the render model must appear in each text, in model order. A miss means the PDF text layer or the DOCX lost text an ATS needs. Render fails and names the target, file and missing text.
 3. `terms.scan_text` runs on each extracted text. This catches text the renderer adds itself (headings, month names, "Present"), and anything a writer bug introduces.
 
@@ -246,12 +257,12 @@ resume-write writes `stories.md` into `06-bullets/`, before sanitize apply, so i
 
 ## Chromium
 
-Before rendering, `render.py` launches Chromium once (skipped with `--no-pdf` or `--check`). If Playwright cannot find it, render exits 3 before writing anything. The skill tells the engineer that installing downloads about 150 MB into Playwright's cache outside the workspace, then offers two choices:
+Before rendering, `render.py` launches Chromium once (skipped with `--no-pdf` or `--check`). If Playwright cannot find it, or it does not start, render exits 3 before writing anything. The skill tells the engineer that installing downloads about 150 MB into Playwright's cache outside the workspace, then offers two choices:
 
 - `render.py --install-browser` runs `python -m playwright install chromium` in the script's own environment, so the browser build matches the pinned Playwright version. `--with-deps` also installs the Linux system libraries (CI uses it).
 - `render.py --no-pdf` writes DOCX and TXT only, and records `"pdf": false` in `_stage.json` `extra`. The output check then covers those two files.
 
-Playwright honors `PLAYWRIGHT_BROWSERS_PATH`. If Chromium is installed but fails to launch, render prints Playwright's error with a hint to try `--with-deps`.
+Playwright honors `PLAYWRIGHT_BROWSERS_PATH`. If Chromium is installed but fails to launch, render prints Playwright's error with a hint to try `--with-deps`. The pinned Playwright is 1.56.0 (Chromium build 1194); moving the pin also moves the browser build `--install-browser` fetches.
 
 ## SKILL.md
 
@@ -268,7 +279,7 @@ The render implementation plan makes these changes, with tests:
 1. Adds `rcore/profile.py` and `rcore/facts.py`. `sources.check_resume` applies the fact-field rules to tailored resumes, and compares `basics.label` against the effective label.
 2. `sources.check_file` validates a resume against its schema before checking it. An invalid resume gives the line `<file>: does not match its schema; run validate.py` instead of a traceback, so `check_sources.py` is safe to run on its own.
 3. Removes `x-sources` from `basics` and every entry type in `tailored-resume.schema.json`, and from the fixture's tailored resumes.
-4. Adds a `projects` entry, a `certificates` entry and a `basics.profiles` item to the fixture profile and tailored resumes, plus `07-sanitized/stories.md`, so the render tests cover every section.
+4. Adds a `projects` entry, a `certificates` entry (a wizard answer) and a `basics.profiles` item to the fixture profile and tailored resumes, plus `07-sanitized/stories.md` and an unsanitized `06-bullets/stories.md`, so the render tests cover every section and the stories rule.
 5. resume-core `SKILL.md` adds fact fields to the `check_sources.py` row of its checks table.
 6. In the architecture spec:
    - The known-limits sentence about free strings points to this spec.
@@ -316,7 +327,7 @@ The previous `out/` survives every failure.
   - A resume with an `https://` URL causes no network request (counted in the route handler).
   - Page counts appear in `_stage.json`.
 - **No Chromium:** with `PLAYWRIGHT_BROWSERS_PATH` pointing at an empty folder, render exits 3 and writes nothing, and `--no-pdf` writes DOCX and TXT.
-- **CI** runs `render.py --install-browser --with-deps`. Chromium tests carry a `chromium` marker. They skip locally when Chromium is missing and fail in CI (`CI` is set).
+- **CI** runs `render.py --install-browser --with-deps`, then `uv run --with pytest --with-requirements skills/resume-render/scripts/render.py pytest`, which takes the render dependencies from `render.py`'s inline metadata. Chromium tests carry a `chromium` marker. Without the dependencies or Chromium, the render tests skip locally and fail in CI (`CI` is set).
 
 ## Out of scope for v1
 
