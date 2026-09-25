@@ -1,0 +1,55 @@
+{
+  "evidence_sha256": "sha256:2dd0058e0464b1feb7a35e0a727abc44b2e65a29f0bb634b7de503e6689380cc",
+  "clusters": [
+    {
+      "id": "c1",
+      "label": "Project Falcon: checkout latency",
+      "evidence_ids": [
+        "ev_99a74656",
+        "ev_191cc8ce",
+        "ev_56410ed1"
+      ],
+      "start": "2025-02-10",
+      "end": "2025-05-30",
+      "days": 109,
+      "kinds": {
+        "pr": 1,
+        "review": 1,
+        "epic": 1
+      },
+      "authored": 1,
+      "reviewed": 1,
+      "assigned": 1,
+      "reported": 0,
+      "stats": {
+        "additions": 812,
+        "deletions": 140,
+        "files": 23
+      },
+      "repos": [
+        "northwind/ledger"
+      ],
+      "jira_projects": [
+        "PAY"
+      ],
+      "contributors": 2,
+      "epics": [
+        "ev_99a74656"
+      ],
+      "epics_created": [],
+      "first_authored_at": "2025-03-04",
+      "authored_first": true,
+      "open_items": 0,
+      "review_mentions": []
+    }
+  ],
+  "reviews": [
+    {
+      "id": "ev_cbf558fa",
+      "title": "2025 H1 performance review",
+      "date": "2025-07-15",
+      "raw_ref": "01-raw/reviews.jsonl:1#/items/0",
+      "clusters": []
+    }
+  ]
+}
