@@ -10,6 +10,17 @@ def test_jsonl_round_trip(tmp_path):
     assert wsio.read_jsonl(path) == [{"a": "é", "b": 1}, {"c": None}]
 
 
+def test_jsonl_keeps_line_separators_inside_strings(tmp_path):
+    path = tmp_path / "items.jsonl"
+    record = {"t": "a\u2028b\u2029c\x1cd\x85e"}
+    wsio.write_jsonl(path, [record, {"n": 2}])
+    text = path.read_text(encoding="utf-8")
+    assert len(text.splitlines()) == 2
+    assert wsio.read_jsonl(path) == [record, {"n": 2}]
+    path.write_text('{"t": "a\u2028b"}\n{"n": 2}\n', encoding="utf-8")
+    assert wsio.read_jsonl(path) == [{"t": "a\u2028b"}, {"n": 2}]
+
+
 def test_read_jsonl_names_bad_line(tmp_path):
     path = tmp_path / "bad.jsonl"
     path.write_text('{"a": 1}\n\n{oops}\n', encoding="utf-8")
