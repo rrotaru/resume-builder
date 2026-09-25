@@ -1,15 +1,19 @@
 """Terms check: no denylisted term from decisions/terms.json appears in output text.
 
 Matching is strict. Terms and scanned text are both normalized (NFKC, invisible
-format characters removed, casefolded). A term's words may be separated by any
-run of separator characters (whitespace, underscore, dashes, minus, full stop,
-slash, middle dot), or by nothing. A trailing "s" or "es" still matches for
-terms of 5 or more characters. A match must not have a letter, digit or
-underscore on either side.
+characters removed, casefolded). Invisible characters are format characters
+(category Cf), U+034F, the other Default_Ignorable_Code_Point ranges (variation
+selectors, Hangul fillers, Mongolian free variation selectors, tag characters
+and the like) and the Braille blank U+2800. A term's words may be separated by
+any run of separator characters (whitespace, underscore, dashes, minus, full
+stop, slash, backslash, middle dot, bullets and other slash/dot lookalikes),
+or by nothing. A trailing "s" or "es" still matches for terms of 5 or more
+characters. A match must not have a letter, digit or underscore on either side.
 
 Allowed terms (replacement null) are matched literally: normalized, whole-word,
 with no separator flexibility and no plural. A denied match lying entirely
-inside an allowed match is not reported.
+inside an allowed match is not reported. An allowed term may not equal or
+contain a denied term (see allowed_conflicts); terms.json is then invalid.
 """
 from __future__ import annotations
 
@@ -23,23 +27,43 @@ from pathlib import Path
 from . import schema, wsio
 
 TERMS_FILE = "decisions/terms.json"
-_GRAPHEME_JOINER = "\u034f"
-# Whitespace, underscore, every dash (category Pd), minus sign, full stop, slash, middle dot.
+# Invisible characters stripped besides category Cf: U+034F combining grapheme
+# joiner, the rest of Unicode's Default_Ignorable_Code_Point set, and the
+# Braille blank. Inclusive (first, last) code point ranges.
+_IGNORABLE_RANGES = [
+    (0x034F, 0x034F),    # combining grapheme joiner
+    (0x115F, 0x1160),    # Hangul choseong and jungseong fillers
+    (0x17B4, 0x17B5),    # Khmer inherent vowels
+    (0x180B, 0x180F),    # Mongolian free variation selectors and vowel separator
+    (0x2800, 0x2800),    # Braille pattern blank
+    (0x3164, 0x3164),    # Hangul filler
+    (0xFE00, 0xFE0F),    # variation selectors 1-16
+    (0xFFA0, 0xFFA0),    # half-width Hangul filler
+    (0x1BCA0, 0x1BCA3),  # shorthand format controls
+    (0x1D173, 0x1D17A),  # musical symbol format controls
+    (0xE0000, 0xE0FFF),  # tags and variation selectors 17-256
+]
+_IGNORABLE = frozenset(chr(c) for first, last in _IGNORABLE_RANGES for c in range(first, last + 1))
+# Whitespace, underscore, every dash (category Pd), minus sign, full stop, slash,
+# backslash, middle dot, and lookalikes: division slash, fraction slash, hyphenation
+# point, hyphen bullet, modifier minus, katakana middle dot, bullet.
 _DASHES = "".join(
     chr(c) for c in range(sys.maxunicode + 1) if unicodedata.category(chr(c)) == "Pd"
 )
-_SEPARATOR = "[\\s" + re.escape("_" + _DASHES + "\u2212./\u00b7") + "]"
+_SEPARATOR = "[\\s" + re.escape(
+    "_" + _DASHES + "\u2212./\\\u00b7\u2215\u2044\u2027\u2043\u02d7\u30fb\u2022"
+) + "]"
 _PLURAL_MIN_LENGTH = 5
 
 
 def _strip_invisible(text: str) -> str:
     return "".join(
-        c for c in text if c != _GRAPHEME_JOINER and unicodedata.category(c) != "Cf"
+        c for c in text if c not in _IGNORABLE and unicodedata.category(c) != "Cf"
     )
 
 
 def normalize(text: str) -> str:
-    """NFKC, remove format characters (category Cf) and U+034F, then casefold."""
+    """NFKC, remove invisible characters (category Cf and _IGNORABLE_RANGES), then casefold."""
     return _strip_invisible(unicodedata.normalize("NFKC", _strip_invisible(text))).casefold()
 
 
@@ -62,7 +86,34 @@ def _read_terms(workspace: Path) -> tuple[list[str], list[str], list[str]]:
         return [], [], [f"{TERMS_FILE}: {p}" for p in problems]
     denied = [t["term"] for t in data if t["replacement"] is not None]
     allowed = [t["term"] for t in data if t["replacement"] is None]
+    conflicts = allowed_conflicts(denied, allowed)
+    if conflicts:
+        return [], [], conflicts
     return denied, allowed, []
+
+
+def _words(term: str) -> str:
+    """The normalized term with each run of separators replaced by one space."""
+    return " ".join(w for w in re.split(_SEPARATOR + "+", normalize(term)) if w)
+
+
+def allowed_conflicts(denied: list[str], allowed: list[str]) -> list[str]:
+    """Errors for allowed terms that equal or contain a denied term.
+
+    Both terms are normalized with separator runs collapsed to single spaces;
+    the denied term must appear in the allowed term as a whole word. An
+    allowed term like that would let the denied name through.
+    """
+    errors = []
+    for a in allowed:
+        a_words = _words(a)
+        for d in denied:
+            d_words = _words(d)
+            same = normalize(a) == normalize(d)
+            if same or (d_words and re.search(r"(?<!\w)" + re.escape(d_words) + r"(?!\w)", a_words)):
+                errors.append(f"{TERMS_FILE}: allowed term '{a}' contains denied term '{d}'; "
+                              "remove it or reword")
+    return errors
 
 
 def load_denylist(workspace: Path) -> list[str]:

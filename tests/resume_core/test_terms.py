@@ -149,8 +149,12 @@ def test_allowed_term_containing_the_match_exempts_it():
     ]
     patterns = terms.compile_terms(["Air Flow"], allowed=["Airflow"])
     assert terms.scan_json({"a": "Migrated DAGs to Airflow"}, patterns, "x") == []
-    patterns = terms.compile_terms(["Atla"], allowed=["Atlas"])
-    assert terms.scan_json({"a": "MongoDB Atlas"}, patterns, "x") == []
+    patterns = terms.compile_terms(["Falcon"], allowed=["Falcons Club"])
+    assert terms.scan_json({"a": "Member of the Falcons Club"}, patterns, "x") == []
+    for text in ["Falcon", "Falcons"]:
+        assert terms.scan_json({"a": text}, patterns, "x") == [
+            "x:/a: contains denylisted term 'Falcon'"
+        ], text
 
 
 def test_allowed_terms_are_read_from_terms_json(workspace):
@@ -173,3 +177,65 @@ def test_scan_text_uses_splitlines_boundaries():
     assert terms.scan_text("a\x0bb\x0cc\x1cd\x85e\u2028f\u2029Contoso Bank", PATTERNS, "x") == [
         "x:7: contains denylisted term 'Contoso Bank'"
     ]
+
+
+@pytest.mark.parametrize("text", [
+    "Conto\ufe0fso Bank",       # variation selector 16
+    "Conto\ufe00so Bank",       # variation selector 1
+    "Conto\U000E0100so Bank",   # variation selector 17
+    "Conto\u180bso Bank",       # Mongolian free variation selector
+    "Conto\u17b4so Bank",       # Khmer vowel inherent aq
+    "Contoso\u3164Bank",        # Hangul filler
+    "Contoso\u115fBank",        # Hangul choseong filler
+    "Contoso\uffa0Bank",        # half-width Hangul filler
+    "Conto\u1160so Bank",       # Hangul jungseong filler
+    "Contoso\u2800Bank",        # Braille blank
+])
+def test_default_ignorable_characters_are_ignored(text):
+    assert terms.scan_json({"a": text}, PATTERNS, "x") == ["x:/a: contains denylisted term 'Contoso Bank'"]
+
+
+@pytest.mark.parametrize("sep", ["\\", "\u2215", "\u2044", "\u2027", "\u2043", "\u02d7", "\u30fb", "\u2022"])
+def test_more_separator_lookalikes_are_accepted(sep):
+    assert terms.scan_json({"a": f"Led Project{sep}Falcon"}, PATTERNS, "x") == [
+        "x:/a: contains denylisted term 'Project Falcon'"
+    ]
+
+
+def _write_terms(workspace, entries):
+    (workspace / "decisions" / "terms.json").write_text(json.dumps(entries), encoding="utf-8")
+
+
+def _deny(term):
+    return {"term": term, "replacement": "something else", "kind": "customer"}
+
+
+def _allow(term):
+    return {"term": term, "replacement": None, "kind": "other"}
+
+
+@pytest.mark.parametrize("denied, allowed", [
+    ("Contoso Bank", "Contoso Bank Group"),
+    ("Contoso", "Contoso Bank"),
+    ("Contoso Bank", "Contoso Bank"),
+    ("Contoso Bank", "CONTOSO  BANK"),
+    ("Contoso-Bank", "Contoso Bank Group"),
+    ("Contoso Bank", "Contoso-Bank Group"),
+])
+def test_allowed_term_cannot_contain_a_denied_term(workspace, denied, allowed):
+    _write_terms(workspace, [_deny(denied), _allow(allowed)])
+    expected = [f"decisions/terms.json: allowed term '{allowed}' contains denied term '{denied}'; "
+                "remove it or reword"]
+    assert terms.check_file(workspace, "07-sanitized/bullets.json") == expected
+    with pytest.raises(ValueError, match="contains denied term"):
+        terms.load_denylist(workspace)
+
+
+@pytest.mark.parametrize("denied, allowed", [
+    ("Check Point", "checkpoint"),
+    ("Air Flow", "Airflow"),
+    ("Falcon", "Falcons Club"),
+])
+def test_allowed_terms_that_do_not_contain_a_denied_term_are_accepted(workspace, denied, allowed):
+    _write_terms(workspace, [_deny(denied), _allow(allowed)])
+    assert terms.check_file(workspace, "07-sanitized/bullets.json") == []

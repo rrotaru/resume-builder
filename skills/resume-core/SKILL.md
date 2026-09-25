@@ -69,13 +69,15 @@ A `resume:` or `wizard:` pointer must start with `/` and point to a single strin
 | `check_terms.py FILE ...` | text contains a term from `decisions/terms.json` whose `replacement` is not null, or `decisions/terms.json` is missing or invalid |
 | `check_flags.py JOB ...` | a bullet in `08-ats/jobs/<JOB>/resume.json` is flagged with no matching attestation, or changed after the claim diff, or a flag names a bullet that is gone |
 
-Each prints one line per problem (file, record and rule) and exits 1 on failure. A missing, non-UTF-8 or invalid-JSON file is reported as a problem line, not a crash.
+Each prints one line per problem (file, record and rule) and exits 1 on failure. `validate.py` and `check_sources.py` normalize each path first (`./`, `//`, `.` and `..` segments, or an absolute path inside the workspace), and report a path outside the workspace as an error. `check_sources.py` applies the tailored-resume checks to every resume object except the profile files (`03-profile/profile.json`, `07-sanitized/profile.json`, `decisions/profile.json`). A missing, non-UTF-8 or invalid-JSON file is reported as a problem line, not a crash.
 
-The terms check is strict: it matches after Unicode NFKC normalization, removal of invisible format characters (such as zero-width spaces and soft hyphens) and case folding; the words of a term may be joined by any run of spaces, line breaks, underscores, dashes, minus signs, full stops, slashes or middle dots, or by nothing; and for terms of 5 or more letters a plural `s`/`es` still matches. So `Project-Falcon`, `Project.Falcon`, `ProjectFalcon` and `Falcons` are all caught.
+The terms check is strict: it matches after Unicode NFKC normalization, removal of invisible characters (format characters such as zero-width spaces and soft hyphens, variation selectors, Hangul fillers, tag characters and the Braille blank) and case folding; the words of a term may be joined by any run of spaces, line breaks, underscores, dashes, minus signs, full stops, slashes, backslashes, middle dots, bullets or similar slash and dot lookalikes, or by nothing; and for terms of 5 or more letters a plural `s`/`es` still matches. So `Project-Falcon`, `Project.Falcon`, `ProjectFalcon` and `Falcons` are all caught.
 
 An allowed term (`replacement: null`) exempts a denied match only when the allowed term, matched literally (same words, same spacing, case-insensitive, whole word, no plural), covers the whole match. For example, with `Check Point` denied and `checkpoint` allowed, "Added a checkpoint" passes and "Worked at Check Point" still fails.
 
 To resolve a false positive, either add the flagged word to `decisions/terms.json` as an allowed term (`replacement: null`), with the engineer's agreement, or reword the text. Never weaken or bypass the check itself.
+
+Allowed terms match literally, so plural forms are not covered: add each one as its own allowed term (for example `checkpoints` beside `checkpoint`). An allowed term may not equal or contain a denied term as a whole word (with `Contoso` denied, `Contoso Bank` cannot be allowed); `decisions/terms.json` is then invalid and the terms check fails.
 
 ## Python helpers for other skills' scripts
 
