@@ -210,11 +210,14 @@ def _job_spellings(workspace):
         "08-ats/jobs/fintech-sre/./resume.json",
         "08-ats/jobs/../jobs/fintech-sre/resume.json",
         str(workspace / JOB),
+        "08-ats\\jobs\\fintech-sre\\resume.json",
+        "link/jobs/fintech-sre/resume.json",
     ]
 
 
 def test_label_check_applies_to_every_spelling_of_a_tailored_path(workspace):
     _edit_job(workspace, lambda r: r["basics"].update(label="CTO"))
+    (workspace / "link").symlink_to("08-ats", target_is_directory=True)
     for rel in _job_spellings(workspace):
         assert sources.check_file(workspace, rel) == [f"{rel}: {LABEL_ERROR}"], rel
 

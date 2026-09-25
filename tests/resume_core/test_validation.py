@@ -206,3 +206,53 @@ def test_workspace_relative():
     assert validation.workspace_relative("/ws", "/wsx/a.json") is None
     assert validation.workspace_relative("/ws", "a/../../b.json") is None
     assert validation.workspace_relative("/ws", "..") is None
+
+
+def _break_job(workspace):
+    resume = wsio.read_json(workspace / JOB)
+    resume["work"][0]["summary"] = "Led payments"
+    wsio.write_json(workspace / JOB, resume)
+
+
+def test_path_through_a_symlink_is_resolved(workspace):
+    _break_job(workspace)
+    (workspace / "link").symlink_to("08-ats", target_is_directory=True)
+    rel = "link/jobs/fintech-sre/resume.json"
+    assert validation.workspace_relative(workspace, rel) == JOB
+    errors = validation.validate_paths(workspace, [rel])
+    assert errors == [f"{rel}: $.work[0].summary: unexpected property"]
+
+
+def test_symlink_out_of_the_workspace_is_an_error(workspace, tmp_path):
+    outside = tmp_path / "elsewhere"
+    outside.mkdir()
+    (outside / "resume.json").write_text("{}", encoding="utf-8")
+    (workspace / "out-link").symlink_to(outside, target_is_directory=True)
+    assert validation.validate_paths(workspace, ["out-link/resume.json"]) == [
+        "out-link/resume.json: outside the workspace"
+    ]
+
+
+def test_backslash_spelling_is_validated(workspace):
+    _break_job(workspace)
+    rel = "08-ats\\jobs\\fintech-sre\\resume.json"
+    assert validation.workspace_relative(workspace, rel) == JOB
+    assert validation.schema_for(rel) == ("tailored-resume", "json")
+    errors = validation.validate_paths(workspace, [rel])
+    assert errors == [f"{rel}: $.work[0].summary: unexpected property"]
+
+
+def test_path_patterns_ignore_case():
+    assert validation.schema_for("08-ATS/jobs/fintech-sre/resume.json") == ("tailored-resume", "json")
+    assert validation.schema_for("08-Ats/Jobs/X/FLAGS.JSON") == ("flags", "json")
+    assert validation.schema_for("06-BULLETS.TMP/bullets.json") == ("bullets", "json")
+
+
+def test_named_unmapped_file_has_no_schema(workspace):
+    (workspace / "01-raw").mkdir(exist_ok=True)
+    (workspace / "01-raw" / "x.json").write_text("{}", encoding="utf-8")
+    assert validation.validate_paths(workspace, ["01-raw/x.json"]) == [
+        "01-raw/x.json: no schema for this path"
+    ]
+    assert validation.validate_paths(workspace, ["01-raw"]) == []
+    assert validation.validate_workspace(workspace) == []

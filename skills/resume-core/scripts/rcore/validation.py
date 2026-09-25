@@ -35,7 +35,9 @@ FILE_SCHEMAS: list[tuple[str, str, str]] = [
 
 
 def _matches(rel: str, pattern: str) -> bool:
-    parts, pattern_parts = rel.split("/"), pattern.split("/")
+    """Match one path segment per pattern segment, ignoring case (a case-insensitive
+    file system opens '08-ATS/...' as the real file)."""
+    parts, pattern_parts = rel.lower().split("/"), pattern.lower().split("/")
     return len(parts) == len(pattern_parts) and all(
         fnmatch.fnmatchcase(p, q) for p, q in zip(parts, pattern_parts)
     )
@@ -50,23 +52,21 @@ def logical_path(rel: str) -> str:
 
 
 def workspace_relative(workspace, rel) -> str | None:
-    """Normalize a path given relative to (or inside) the workspace.
+    """Resolve a path given relative to (or inside) the workspace.
 
-    Returns the posixpath.normpath form relative to the workspace ("." for the
-    workspace itself), or None when the path lies outside the workspace. An
-    absolute path is made relative when it is inside the workspace.
+    Backslashes are read as "/". The path is resolved with os.path.realpath
+    (so "..", "." and symlinks are followed) and made relative to the real
+    workspace, with "/" separators ("." for the workspace itself). Returns
+    None when the path resolves outside the workspace.
     """
-    path = posixpath.normpath(str(rel))
-    if posixpath.isabs(path):
-        for root in (os.path.abspath(workspace), os.path.realpath(workspace)):
-            root = posixpath.normpath(root)
-            if path == root:
-                return "."
-            prefix = root.rstrip("/") + "/"
-            if path.startswith(prefix):
-                return path[len(prefix):]
+    spelled = str(rel).replace("\\", "/")
+    root = os.path.realpath(workspace)
+    try:
+        path = os.path.relpath(os.path.realpath(os.path.join(root, spelled)), root)
+    except ValueError:  # a different drive on Windows
         return None
-    if path == ".." or path.startswith("../"):
+    path = path.replace(os.sep, "/")
+    if path == ".." or path.startswith("../") or os.path.isabs(path):
         return None
     return path
 
@@ -79,9 +79,10 @@ def schema_for(rel: str) -> tuple[str, str] | None:
     """Return (schema name, format) for a workspace-relative path, or None.
 
     The path is normalized first, so "./a", "a//b" and "a/../a" spellings map
-    the same way as the plain path.
+    the same way as the plain path. Backslashes are read as "/" and case is
+    ignored.
     """
-    logical = logical_path(posixpath.normpath(rel))
+    logical = logical_path(posixpath.normpath(str(rel).replace("\\", "/")).lower())
     for pattern, name, fmt in FILE_SCHEMAS:
         if _matches(logical, pattern):
             return name, fmt
@@ -93,9 +94,13 @@ def _duplicate_ids(records: list) -> list[str]:
     return sorted(i for i, n in Counter(ids).items() if n > 1)
 
 
-def validate_file(path: Path, rel: str) -> list[str]:
-    """Validate one file against the schema its path maps to. Unmapped files pass."""
-    mapping = schema_for(rel)
+def validate_file(path: Path, rel: str, logical: str | None = None) -> list[str]:
+    """Validate one file against the schema its path maps to. Unmapped files pass.
+
+    rel labels the errors; logical (default rel) is the resolved
+    workspace-relative path used to choose the schema.
+    """
+    mapping = schema_for(rel if logical is None else logical)
     if mapping is None:
         return []
     name, fmt = mapping
@@ -122,10 +127,14 @@ def validate_file(path: Path, rel: str) -> list[str]:
 def validate_paths(workspace: Path, rels: list[str]) -> list[str]:
     """Validate files and directories given relative to the workspace.
 
-    Paths are normalized (see workspace_relative). A path outside the
-    workspace is an error.
+    Paths are resolved (see workspace_relative). A path outside the workspace
+    is an error, and so is a named file that no schema maps to. Files found
+    while walking a named directory pass when unmapped (01-raw has no schema).
     """
-    workspace = Path(workspace)
+    return _validate(Path(workspace), rels, named_files_need_schema=True)
+
+
+def _validate(workspace: Path, rels: list[str], named_files_need_schema: bool) -> list[str]:
     errors: list[str] = []
     for rel in rels:
         normalized = workspace_relative(workspace, rel)
@@ -137,17 +146,25 @@ def validate_paths(workspace: Path, rels: list[str]) -> list[str]:
             for path in sorted(p for p in target.rglob("*") if p.is_file()):
                 errors += validate_file(path, path.relative_to(workspace).as_posix())
         elif target.is_file():
-            errors += validate_file(target, normalized if posixpath.isabs(str(rel)) else str(rel))
+            if schema_for(normalized) is None:
+                if named_files_need_schema:
+                    errors.append(f"{rel}: no schema for this path")
+                continue
+            label = normalized if os.path.isabs(str(rel)) else str(rel)
+            errors += validate_file(target, label, logical=normalized)
         else:
             errors.append(f"{rel}: not found")
     return errors
 
 
 def validate_workspace(workspace: Path) -> list[str]:
-    """Validate every committed file in the workspace (skips *.tmp and *.old folders)."""
+    """Validate every committed file in the workspace (skips *.tmp and *.old folders).
+
+    Unmapped files pass, as in a directory walk.
+    """
     workspace = Path(workspace)
     rels = sorted(
         p.name for p in workspace.iterdir()
         if not p.name.endswith((".tmp", ".old"))
     )
-    return validate_paths(workspace, rels)
+    return _validate(workspace, rels, named_files_need_schema=False)
