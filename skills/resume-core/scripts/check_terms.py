@@ -19,8 +19,9 @@ def main() -> int:
     parser.add_argument("--workspace", default="resume-workspace", type=Path)
     parser.add_argument("files", nargs="+")
     args = parser.parse_args()
-    patterns = terms.compile_terms(terms.load_denylist(args.workspace))
-    errors = [e for rel in args.files for e in terms.check_file(args.workspace, rel, patterns)]
+    patterns, errors = terms.load_patterns(args.workspace)
+    if not errors:
+        errors = [e for rel in args.files for e in terms.check_file(args.workspace, rel, patterns)]
     for error in errors:
         print(error)
     if errors:

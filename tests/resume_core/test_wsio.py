@@ -46,3 +46,15 @@ def test_resume_highlights():
         ("/work/0/x-highlights/0", "b_1"),
         ("/projects/1/x-highlights/0", "b_2"),
     ]
+
+
+def test_load_reports_problems_as_lines(tmp_path):
+    (tmp_path / "ok.json").write_text('{"a": 1}', encoding="utf-8")
+    (tmp_path / "bad.json").write_text("{", encoding="utf-8")
+    (tmp_path / "bad.jsonl").write_text('{"a": 1}\n{oops}\n', encoding="utf-8")
+    (tmp_path / "bin.txt").write_bytes(b"\xff\xfe")
+    assert wsio.load(tmp_path, "ok.json") == ({"a": 1}, None)
+    assert wsio.load(tmp_path, "nope.json") == (None, "nope.json: not found")
+    assert wsio.load(tmp_path, "bad.json")[1].startswith("bad.json: invalid JSON: ")
+    assert wsio.load(tmp_path, "bad.jsonl", "jsonl")[1].startswith("bad.jsonl: invalid JSON on line 2: ")
+    assert wsio.load(tmp_path, "bin.txt", "text") == (None, "bin.txt: not UTF-8 text")

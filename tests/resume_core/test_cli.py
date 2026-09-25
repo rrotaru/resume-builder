@@ -50,3 +50,10 @@ def test_stage_cli_round_trip(workspace):
 def test_init_workspace_cli(tmp_path):
     result = run("init_workspace.py", "--workspace", tmp_path / "ws", "--target-role", "SRE")
     assert result.returncode == 0 and "workspace ready" in result.stdout
+
+
+def test_check_terms_cli_fails_closed_without_terms_file(workspace):
+    (workspace / "decisions" / "terms.json").unlink()
+    result = run("check_terms.py", "--workspace", workspace, "07-sanitized/bullets.json")
+    assert result.returncode == 1
+    assert result.stdout.splitlines() == ["decisions/terms.json: not found; run init_workspace.py"]
