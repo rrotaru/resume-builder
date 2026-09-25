@@ -30,18 +30,38 @@ SUPPORTED_KEYWORDS = frozenset({
 })
 
 
+def _has_inner_dollar(pattern: str) -> bool:
+    """True if pattern has an unescaped $ anywhere but its last character.
+
+    _search turns only a final $ into end-of-string; any other $ would keep
+    re's "before a trailing newline" meaning, so it is not allowed.
+    """
+    escaped = False
+    for i, char in enumerate(pattern):
+        if escaped:
+            escaped = False
+        elif char == "\\":
+            escaped = True
+        elif char == "$" and i != len(pattern) - 1:
+            return True
+    return False
+
+
 def check_schema(node, name: str, path: str = "#") -> None:
     """Raise ValueError if a schema uses a keyword outside SUPPORTED_KEYWORDS.
 
     Walks only schema positions: the schema itself, each value under
     properties and $defs, items, a schema-valued additionalProperties and
     each anyOf branch. Property names and const/enum values are data.
+    Also rejects a pattern with an unescaped $ anywhere but at the very end.
     """
     if not isinstance(node, dict):
         raise ValueError(f"{name}: expected a schema object at {path}")
     for key in node:
         if key not in SUPPORTED_KEYWORDS:
             raise ValueError(f"{name}: unsupported keyword '{key}' at {path}")
+    if isinstance(node.get("pattern"), str) and _has_inner_dollar(node["pattern"]):
+        raise ValueError(f"{name}: pattern may use an unescaped '$' only at the end, at {path}")
     for key in ("properties", "$defs"):
         for child, sub in node.get(key, {}).items():
             check_schema(sub, name, f"{path}/{key}/{child}")

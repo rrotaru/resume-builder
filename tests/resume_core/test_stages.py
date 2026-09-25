@@ -150,3 +150,19 @@ def test_commit_rejects_inputs_outside_the_workspace(workspace, rel):
     assert stages.commit(workspace, "06-bullets", ["04-projects", rel]) == [
         f"input must be workspace-relative: {rel}"
     ]
+
+
+@pytest.mark.parametrize("rel", ["", ".", "./", "./.", "04-projects/.."])
+def test_commit_rejects_the_workspace_root_as_input(workspace, rel):
+    _write_bullets(workspace, [BULLET])
+    assert stages.commit(workspace, "06-bullets", ["04-projects", rel]) == [
+        f"input must be workspace-relative: {rel}"
+    ]
+
+
+def test_commit_rejects_an_input_that_resolves_to_the_workspace_root(workspace):
+    (workspace / "root-link").symlink_to(workspace, target_is_directory=True)
+    _write_bullets(workspace, [BULLET])
+    assert stages.commit(workspace, "06-bullets", ["root-link"]) == [
+        "input must be workspace-relative: root-link"
+    ]

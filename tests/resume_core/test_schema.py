@@ -95,3 +95,13 @@ def test_load_schema_rejects_unsupported_keywords(tmp_path, monkeypatch):
     monkeypatch.setattr(schema_module, "SCHEMA_DIR", tmp_path)
     with pytest.raises(ValueError, match="bad: unsupported keyword 'maxLength' at #"):
         schema_module.load_schema("bad")
+
+
+def test_pattern_with_unescaped_dollar_before_the_end_is_rejected():
+    with pytest.raises(ValueError, match=r"x: pattern may use an unescaped '\$' only at the end, at #/properties/a"):
+        check_schema({"properties": {"a": {"type": "string", "pattern": "^a$|^b$"}}}, "x")
+    with pytest.raises(ValueError, match=r"unescaped '\$'"):
+        check_schema({"pattern": "^a\\\\$b$"}, "x")  # escaped backslash, then a bare $
+    check_schema({"pattern": "^a\\$b$"}, "x")
+    check_schema({"pattern": "^a$"}, "x")
+    check_schema({"pattern": "^a\\\\$"}, "x")

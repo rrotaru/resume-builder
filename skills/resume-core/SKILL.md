@@ -35,7 +35,7 @@ resume-workspace/
 2. Write every output file into that folder.
 3. `uv run ../resume-core/scripts/stage.py --workspace WS commit <stage> --inputs <each file or folder you read>`
    records input hashes, validates the folder, and swaps it into place.
-   Inputs must be workspace-relative (no absolute paths, no `..`).
+   Inputs must be workspace-relative (no absolute paths, no `..`, not the workspace root such as `.` or an empty path).
    To record facts about the run, such as skipped rows, add `--extra '{"skipped_rows": 3}'` (a JSON object, stored as `extra` in `_stage.json`).
 4. If commit prints errors, fix the named records and commit again. The previous output stays in place until a commit succeeds. Never skip or weaken a check.
 

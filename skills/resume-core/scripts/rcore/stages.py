@@ -51,9 +51,14 @@ def begin(workspace: Path, stage: str, from_current: bool = False) -> Path:
     return tmp
 
 
-def _outside_workspace(rel: str) -> bool:
+def _outside_workspace(workspace: Path, rel: str) -> bool:
+    """True if rel is absolute, climbs out with "..", or names the workspace root itself."""
     parts = re.split(r"[\\/]", rel)
-    return rel.startswith(("/", "\\")) or re.match(r"^[A-Za-z]:", rel) is not None or ".." in parts
+    if rel.startswith(("/", "\\")) or re.match(r"^[A-Za-z]:", rel) is not None or ".." in parts:
+        return True
+    if all(part in ("", ".") for part in parts):
+        return True
+    return (workspace / rel).resolve() == workspace.resolve()
 
 
 def hash_path(path: Path) -> str:
@@ -89,7 +94,7 @@ def commit(workspace: Path, stage: str, inputs: list[str], extra: dict | None = 
     tmp = tmp_dir(workspace, stage)
     if not tmp.is_dir():
         return [f"{tmp.name}: not found; run begin first"]
-    outside = [rel for rel in inputs if _outside_workspace(rel)]
+    outside = [rel for rel in inputs if _outside_workspace(workspace, rel)]
     if outside:
         return [f"input must be workspace-relative: {rel}" for rel in outside]
     missing = [rel for rel in inputs if not (workspace / rel).exists()]
