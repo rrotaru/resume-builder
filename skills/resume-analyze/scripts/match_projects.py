@@ -17,8 +17,9 @@ Writes groups.json (with IDs) and projects.json into 04-projects.tmp/ and prints
 the projects, exclusions, notes, warnings and orphaned decisions.
 
 Exit codes: 0 written (and committed with --commit); 1 error (no 04-projects.tmp/,
-a missing or invalid signals.json or groups.json, evidence changed since
-signals.py, a group problem, an invalid decision, a failed commit); nothing is
+a missing or invalid signals.json or groups.json, signals.json out of date with
+the evidence, config.json or 01-raw/, a group problem, an invalid decision, a
+failed commit); nothing is
 committed on error; 2 usage error; 3 orphaned decisions: the files are written
 for review, and nothing is committed until each is re-linked or discarded.
 """
@@ -45,15 +46,24 @@ def _parse(argv):
     return parser.parse_args(argv)
 
 
-def _load_signals(workspace: Path) -> dict:
+def _load_signals(workspace: Path, cfg: dict, evidence: list[dict]) -> dict:
+    """The signals the groups were made from, checked against what signals.py would write now.
+
+    The evidence hash gives the usual reason. Recomputing also catches a changed username in
+    config.json or a changed raw record, which the commit would otherwise record as current.
+    """
     data, error = wsio.load(workspace, SIGNALS)
     if error:
         raise AnalyzeError(f"{error}; run signals.py")
     errors = schema.validate(data, schema.load_schema("signals"))
     if errors:
         raise AnalyzeError([f"{SIGNALS}: {e}" for e in errors] + ["run signals.py again"])
-    if data["evidence_sha256"] != evidence_hash(workspace):
+    current = evidence_hash(workspace)
+    if data["evidence_sha256"] != current:
         raise AnalyzeError(f"{EVIDENCE} changed since signals.py ran; run signals.py and group again")
+    if clusters.compute(workspace, cfg, evidence, current)[0] != data:
+        raise AnalyzeError(f"{SIGNALS} no longer matches config.json and {RAW}/ (a username or a raw record "
+                           "changed since signals.py ran); run signals.py and group again")
     return data
 
 
@@ -110,7 +120,7 @@ def main(argv=None) -> int:
                                "--from-current to reuse the committed grouping")
         cfg = load_config(workspace)
         evidence = load_evidence(workspace)
-        signals = _load_signals(workspace)
+        signals = _load_signals(workspace, cfg, evidence)
         draft = _load_draft(workspace)
         settings = cfg["metric_prompts"]
         config.metric_prompt_count(0, settings["percent"], settings["min"], settings["max"])

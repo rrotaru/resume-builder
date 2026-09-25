@@ -139,6 +139,40 @@ def test_match_refuses_evidence_changed_since_signals(workspace, capsys):
         capsys.readouterr().err
 
 
+@pytest.mark.parametrize("change", ["raw", "username"])
+def test_match_refuses_signals_that_config_or_raw_changes_made_stale(workspace, capsys, change):
+    """A changed raw record or username leaves the evidence alone but changes the signals."""
+    assert signals.main(ws_arg(workspace)) == 0
+    write_draft(workspace, draft_from_fixture())
+    if change == "raw":  # PAY-42's reporter becomes the engineer, so they created the epic
+        raw = workspace / "01-raw" / "jira.jsonl"
+        text = raw.read_text(encoding="utf-8")
+        raw.write_text(text.replace('"Reporter": "priya.shah"', '"Reporter": "jordan.rivera"', 1), encoding="utf-8")
+    else:  # the Jira username becomes PAY-42's reporter
+        cfg = wsio.read_json(workspace / "config.json")
+        cfg["sources"][1]["username"] = "priya.shah"
+        wsio.write_json(workspace / "config.json", cfg)
+    capsys.readouterr()
+    assert match_projects.main([*ws_arg(workspace), "--commit"]) == 1
+    assert "error: 04-projects.tmp/signals.json no longer matches config.json and 01-raw/ (a username or a raw " \
+           "record changed since signals.py ran); run signals.py and group again" in capsys.readouterr().err
+    assert not (workspace / "04-projects" / "_stage.json").exists()
+    assert signals.main(ws_arg(workspace)) == 0
+    assert wsio.read_json(workspace / "04-projects.tmp" / "signals.json")["clusters"][0]["epics_created"] == \
+        ["ev_99a74656"]
+    write_draft(workspace, draft_from_fixture())
+    assert match_projects.main([*ws_arg(workspace), "--commit"]) == 0
+
+
+def test_match_accepts_config_changes_that_leave_the_signals_alone(workspace, capsys):
+    assert signals.main(ws_arg(workspace)) == 0
+    write_draft(workspace, draft_from_fixture())
+    cfg = wsio.read_json(workspace / "config.json")
+    cfg["target_role"] = "Staff Engineer"
+    wsio.write_json(workspace / "config.json", cfg)
+    assert match_projects.main([*ws_arg(workspace), "--commit"]) == 0
+
+
 def test_match_prints_group_problems_and_writes_nothing(workspace, capsys):
     assert signals.main(ws_arg(workspace)) == 0
     draft = draft_from_fixture()

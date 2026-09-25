@@ -42,7 +42,7 @@ Later stages attach metrics, bullets and stories to project IDs. Scripts decide 
    - `rank_reasons`: one to three short facts from the signals or the evidence, such as `authored 12 of 15 pull requests` or `named in the 2025 H1 review`. Nothing the evidence does not show.
    - Do not write `id`, `start`, `end` or `metric_prompt`. The script sets them.
 5. Run `uv run scripts/match_projects.py --workspace WS`. It gives each group its ID, applies the recorded decisions, and writes `04-projects.tmp/groups.json` (now with IDs) and `04-projects.tmp/projects.json`.
-   - **Exit 1:** fix `groups.json` as each line and its `fix:` line say, then run it again. If the evidence changed since `signals.py`, start again at step 2.
+   - **Exit 1:** fix `groups.json` as each line and its `fix:` line say, then run it again. If the evidence, a username or a raw record changed since `signals.py` (the error says so), start again at step 2.
    - Check every `note:` about a cluster that is partly grouped: an evidence ID may have been missed while copying.
 6. **Checkpoint 2: review the projects.** Show the engineer the projects as printed (rank, name, role, scope, dates, summary, reasons), the excluded projects, and every `warning:` and `orphaned:` line. Explain that the projects marked `metric prompt` get questions about measurable results in the wizard. Ask whether the grouping, names, summaries, roles, scopes and ranking are right, and whether any project should be left out. Record each change with one command:
    - `uv run scripts/decide.py --workspace WS merge PJ --with PJ2 [PJ3 ...]` moves the other projects' evidence into `PJ`.

@@ -85,7 +85,7 @@ uv run scripts/decide.py --workspace WS discard N
 | `signals.py` | 0 | `04-projects.tmp/signals.json` written |
 | | 1 | Error: no or invalid `config.json`, `02-evidence/evidence.jsonl` missing, invalid or empty, or a timestamp in it that is not `YYYY-MM-DDTHH:MM:SSZ`. Nothing written. |
 | `match_projects.py` | 0 | Groups checked; `groups.json` and `projects.json` written to `04-projects.tmp/`, and committed with `--commit` |
-| | 1 | Error: no `04-projects.tmp/`, a missing or invalid `signals.json` or `groups.json`, evidence changed since `signals.py`, a group problem, an invalid decision, or a failed commit. Nothing committed. |
+| | 1 | Error: no `04-projects.tmp/`, a missing or invalid `signals.json` or `groups.json`, a `signals.json` out of date with the evidence, `config.json` or `01-raw/`, a group problem, an invalid decision, or a failed commit. Nothing committed. |
 | | 3 | Orphaned decisions. The files are written to `04-projects.tmp/` for review, and nothing is committed. |
 | `decide.py` | 0 | Decision recorded, changed or listed |
 | | 1 | Error: no projects to decide about, an unknown project or evidence ID, an invalid split, a rank out of range, or an invalid `decisions/projects.json`. The file is left unchanged. |
@@ -100,7 +100,7 @@ uv run scripts/decide.py --workspace WS discard N
 5. `match_projects.py --commit` repeats step 3 and, if nothing is orphaned, commits `04-projects` with inputs `02-evidence/evidence.jsonl`, `01-raw` (the raw records `signals.py` read), `config.json` and, when it exists, `decisions/projects.json`, and with `extra`:
    `{"projects": 5, "excluded": 1, "metric_prompts": 3, "carried": 4, "new": 2, "decisions": 3, "unassigned": 41}`.
 
-`signals.json` records `evidence_sha256`, the hash of the evidence it was computed from. `match_projects.py` stops with `02-evidence/evidence.jsonl changed since signals.py ran; run signals.py and group again` when the evidence has changed since.
+`signals.json` records `evidence_sha256`, the hash of the evidence it was computed from. `match_projects.py` stops with `02-evidence/evidence.jsonl changed since signals.py ran; run signals.py and group again` when the evidence has changed since. It then computes the signals again from the current evidence, raw records and `config.json` usernames, and stops if they differ from `signals.json` (`04-projects.tmp/signals.json no longer matches config.json and 01-raw/ (a username or a raw record changed since signals.py ran); run signals.py and group again`). Otherwise the commit would record the current `config.json` and `01-raw` hashes beside signals computed from older ones, and `stage.py status` would call the stage fresh. A change that leaves the signals as they were, such as a new `target_role`, passes.
 
 `signals.py` always begins a fresh `04-projects.tmp/`, which discards a draft in progress. When `04-projects.tmp/groups.json` exists, checkpoint 2 is in progress: continue it with `match_projects.py` instead.
 
@@ -370,7 +370,7 @@ To apply new decisions to a committed `04-projects` when the evidence has not ch
 | Case | Behavior |
 |---|---|
 | No evidence, or invalid evidence or config | `signals.py` exits 1. Nothing begun. |
-| Evidence changed after `signals.py` | `match_projects.py` exits 1. Run `signals.py` and group again. |
+| Evidence, a username or a raw record changed after `signals.py` | `match_projects.py` exits 1 when the signals it computes now differ from `signals.json`. Run `signals.py` and group again. |
 | A group problem | Exit 1, one line per problem and a `fix:` line. The draft stays in `04-projects.tmp/` to fix. |
 | Invalid decisions file | Exit 1 naming each record. The skill fixes it with `decide.py discard` and records the decision again. |
 | Orphaned decision | Exit 3 with the closest current project. Nothing committed until it is re-linked or discarded. |
@@ -388,7 +388,7 @@ To apply new decisions to a committed `04-projects` when the evidence has not ch
 - **Decisions:** each action, file order (a rename of a split's new part), the three orphan reasons, a skipped `merge_with` and split group, a split that would empty the project, set-rank past the end, invalid records, the closest-project suggestion, and metric warnings.
 - **Metric prompts:** N after exclusions with the default and custom settings.
 - **Runs:** a first run, decisions, then a second run with a regrouped draft that keeps every ID and decision; a merged project that the model regroups apart; `--from-current` reuse.
-- **CLIs:** each `decide.py` command and rejection, replacement of an older decision, `relink` and `discard`, an unchanged file on error; `match_projects.py` exit 3 with and without `--commit`, the commit's inputs and `extra`; `signals.py` on missing or empty evidence.
+- **CLIs:** each `decide.py` command and rejection, replacement of an older decision, `relink` and `discard`, an unchanged file on error; `match_projects.py` exit 3 with and without `--commit`, the commit's inputs and `extra`, and stale signals after a changed raw record or username (but not after a changed `target_role`); `signals.py` on missing or empty evidence.
 - **Fixture end to end:** from the fixture's evidence and raw files, `signals.py` writes `signals.json` exactly as saved; with the saved groups as the draft, `match_projects.py --commit` writes the saved `groups.json` and `projects.json` byte for byte. The committed stage validates, and the fixture's bullets and metrics still name its project.
 
 ## Out of scope for v1
