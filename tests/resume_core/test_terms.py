@@ -1,3 +1,5 @@
+import json
+
 import pytest
 
 from rcore import terms
@@ -108,3 +110,66 @@ def test_unreadable_scanned_files_are_reported(workspace):
     assert error.startswith("06-bullets/bad.json: invalid JSON")
     (workspace / "06-bullets" / "bin.md").write_bytes(b"\xff\xfe\x00bad")
     assert terms.check_file(workspace, "06-bullets/bin.md") == ["06-bullets/bin.md: not UTF-8 text"]
+
+
+@pytest.mark.parametrize("text", [
+    "for Conto\u00adso Bank",   # soft hyphen
+    "for Conto\u034fso Bank",   # combining grapheme joiner
+    "for Conto\u2061so Bank",   # function application
+    "for Conto\u180eso Bank",   # Mongolian vowel separator
+])
+def test_invisible_characters_are_ignored(text):
+    assert terms.scan_json({"a": text}, PATTERNS, "x") == ["x:/a: contains denylisted term 'Contoso Bank'"]
+
+
+@pytest.mark.parametrize("sep", ["\u2011", "\u2010", "\u2013", "\u2014", "\u2212", ".", "/", "\u00b7"])
+def test_separator_characters_are_accepted(sep):
+    assert terms.scan_json({"a": f"Led Project{sep}Falcon"}, PATTERNS, "x") == [
+        "x:/a: contains denylisted term 'Project Falcon'"
+    ]
+
+
+def test_plural_suffix_only_for_terms_of_five_or_more_characters():
+    patterns = terms.compile_terms(["Falcon", "Rat", "Not", "Tim", "Go"])
+    assert terms.scan_json({"a": "two Falcons"}, patterns, "x") == [
+        "x:/a: contains denylisted term 'Falcon'"
+    ]
+    assert terms.scan_json({"a": "rates, notes, times and goes"}, patterns, "x") == []
+    assert terms.scan_json({"a": "a Rat"}, patterns, "x") == ["x:/a: contains denylisted term 'Rat'"]
+
+
+def test_allowed_term_containing_the_match_exempts_it():
+    patterns = terms.compile_terms(["Check Point"], allowed=["checkpoint"])
+    assert terms.scan_json({"a": "Added a checkpoint"}, patterns, "x") == []
+    assert terms.scan_json({"a": "Worked at Check Point"}, patterns, "x") == [
+        "x:/a: contains denylisted term 'Check Point'"
+    ]
+    assert terms.scan_json({"a": "a checkpoint at Check-Point"}, patterns, "x") == [
+        "x:/a: contains denylisted term 'Check Point'"
+    ]
+    patterns = terms.compile_terms(["Air Flow"], allowed=["Airflow"])
+    assert terms.scan_json({"a": "Migrated DAGs to Airflow"}, patterns, "x") == []
+    patterns = terms.compile_terms(["Atla"], allowed=["Atlas"])
+    assert terms.scan_json({"a": "MongoDB Atlas"}, patterns, "x") == []
+
+
+def test_allowed_terms_are_read_from_terms_json(workspace):
+    path = workspace / "decisions" / "terms.json"
+    entries = json.loads(path.read_text(encoding="utf-8"))
+    entries += [{"term": "Check Point", "replacement": "a security vendor", "kind": "customer"},
+                {"term": "checkpoint", "replacement": None, "kind": "other"}]
+    path.write_text(json.dumps(entries), encoding="utf-8")
+    (workspace / "06-bullets" / "stories.md").write_text(
+        "Added a checkpoint.\nWorked at Check Point.\n", encoding="utf-8")
+    assert terms.check_file(workspace, "06-bullets/stories.md") == [
+        "06-bullets/stories.md:2: contains denylisted term 'Check Point'"
+    ]
+
+
+def test_scan_text_uses_splitlines_boundaries():
+    assert terms.scan_text("a\r\nb\rProject\nFalcon", PATTERNS, "x") == [
+        "x:3: contains denylisted term 'Project Falcon'"
+    ]
+    assert terms.scan_text("a\x0bb\x0cc\x1cd\x85e\u2028f\u2029Contoso Bank", PATTERNS, "x") == [
+        "x:7: contains denylisted term 'Contoso Bank'"
+    ]

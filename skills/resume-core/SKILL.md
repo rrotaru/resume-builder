@@ -71,7 +71,11 @@ A `resume:` or `wizard:` pointer must start with `/` and point to a single strin
 
 Each prints one line per problem (file, record and rule) and exits 1 on failure. A missing, non-UTF-8 or invalid-JSON file is reported as a problem line, not a crash.
 
-The terms check is strict: it matches after Unicode NFKC normalization, removal of zero-width characters and case folding; the words of a term may be joined by spaces, hyphens, underscores, line breaks or nothing; and a plural `s`/`es` still matches. So `Project-Falcon`, `ProjectFalcon` and `Falcons` are all caught.
+The terms check is strict: it matches after Unicode NFKC normalization, removal of invisible format characters (such as zero-width spaces and soft hyphens) and case folding; the words of a term may be joined by any run of spaces, line breaks, underscores, dashes, minus signs, full stops, slashes or middle dots, or by nothing; and for terms of 5 or more letters a plural `s`/`es` still matches. So `Project-Falcon`, `Project.Falcon`, `ProjectFalcon` and `Falcons` are all caught.
+
+An allowed term (`replacement: null`) exempts a denied match only when the allowed term, matched literally (same words, same spacing, case-insensitive, whole word, no plural), covers the whole match. For example, with `Check Point` denied and `checkpoint` allowed, "Added a checkpoint" passes and "Worked at Check Point" still fails.
+
+To resolve a false positive, either add the flagged word to `decisions/terms.json` as an allowed term (`replacement: null`), with the engineer's agreement, or reword the text. Never weaken or bypass the check itself.
 
 ## Python helpers for other skills' scripts
 
