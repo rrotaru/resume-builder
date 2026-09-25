@@ -4,7 +4,9 @@
     "kind": "codename",
     "proposed_replacement": "real-time fraud-detection platform",
     "found_in": [
-      "04-projects/projects.json"
+      "pj_da2a2b53",
+      "ev_99a74656",
+      "ev_191cc8ce"
     ]
   },
   {
@@ -12,7 +14,9 @@
     "kind": "customer",
     "proposed_replacement": "a top-10 US bank",
     "found_in": [
-      "04-projects/projects.json"
+      "pj_da2a2b53",
+      "ev_99a74656",
+      "ev_191cc8ce"
     ]
   }
 ]
