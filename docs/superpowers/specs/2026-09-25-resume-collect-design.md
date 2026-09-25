@@ -124,7 +124,7 @@ folder on this computer. Continue only if you may share this data.
 `01-raw/` has no schema (the roadmap says so), but every file in it has the same line format so that one reader serves all sources:
 
 ```json
-{"query": "is:pr reviewed-by:jrivera created:>=2023-01-01", "cursor": "3", "items": [{...}, {...}]}
+{"query": "is:pr reviewed-by:jrivera updated:>=2023-01-01", "cursor": "3", "items": [{...}, {...}]}
 ```
 
 - `items` (required): records exactly as the connector, export or script produced them.
@@ -183,7 +183,7 @@ Each normalizer turns raw items into drafts: evidence items without `id` or `lin
 - **Excerpt**: the body with HTML comments removed (pull request templates are full of them), whitespace runs as one space, trimmed, then the first 500 characters. It is always present, and empty when there is no body.
 - **Labels**: names, in order, without duplicates.
 - **Ownership**: a username matches when it equals one of the item's identity fields, ignoring case. An item that matches no role is *filtered* (not the engineer's), not bad.
-- **Time range**: an item is kept when `created_at` is on or before `end`, and `closed_at` (or, while it is open, the present) is on or after `start`, comparing UTC dates. Commits are kept when their author date is inside the range. Reviews are always kept. Others are filtered.
+- **Time range**: an item is kept when `created_at` is on or before `end`, and `closed_at` (or, while it is open, the present) is on or after `start`, comparing UTC dates. Commits are kept when their author date is inside the range. Reviews are always kept. Others are filtered. Fetches must therefore ask for a superset of the overlapping items: everything *updated* on or after `start` and created on or before `end`, never only items *created* after `start`, which would miss a pull request opened before the range and merged or reviewed inside it. The one gap is an item still open but untouched since before `start`, which had no activity in the range.
 - **Bad rows** are items missing a required field or holding a value that does not parse. Each is reported as `<file>:<line>: <reason>`, the first 10 per source, and all are counted.
 
 ### GitHub
@@ -264,7 +264,7 @@ The report counts both kinds.
 
 ### IDs and order
 
-After duplicates are removed, `rcore.ids.assign_evidence_ids` runs once over every `(source, native_key)`, so a collision anywhere lengthens both IDs to 12 characters. `evidence.jsonl` is sorted by `created_at`, then `id`, with keys sorted on each line (`wsio.write_jsonl`).
+After duplicates are removed, each `native_key` takes its canonical form: GitHub and GitLab keys in lower case (their owner, repository and project names ignore case) and Jira keys in upper case. So the ID, `sha256(source:native_key)`, does not change when a source or a later run spells the repository differently. Then `rcore.ids.assign_evidence_ids` runs once over every `(source, native_key)`, so a collision anywhere lengthens both IDs to 12 characters. `evidence.jsonl` is sorted by `created_at`, then `id`, with keys sorted on each line (`wsio.write_jsonl`).
 
 ## link.py
 

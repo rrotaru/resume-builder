@@ -144,7 +144,7 @@ All files are JSON or JSONL and validated against `resume-core/schemas`.
 - `kind`: `pr | mr | commit | review | issue | ticket | epic | perf_review`
 - `engineer_role`: `author | reviewer | assignee | reporter | subject`
 - `id` = `ev_` + first 8 hex chars of sha256(`source` + `:` + `native_key`), which is stable across re-collection. Collisions are detected and extended to 12 characters.
-- `native_key`: `owner/repo#n` (GitHub pull request, review or issue), `group/project!n` (GitLab merge request or review) or `group/project#n` (GitLab issue), the Jira key, the full commit hash, or a review file's path under `reviews_dir` without its extension.
+- `native_key`: `owner/repo#n` (GitHub pull request, review or issue), `group/project!n` (GitLab merge request or review) or `group/project#n` (GitLab issue), all in lower case; the Jira key in upper case; the full commit hash in lower case; or a review file's path under `reviews_dir` without its extension. The canonical case keeps the ID stable however a source spells a repository.
 - `links`: IDs of the evidence items this item references, sorted: Jira keys in a title, body or branch name, GitHub and GitLab references and URLs, and a ticket's parent or epic. A reference links only when its target is evidence.
 - `raw_ref`: `01-raw/<file>:<line>#/items/<index>`, the raw record it came from.
 - Items are sorted by `created_at`, then `id`. The same item fetched twice appears once (the copy with the stronger role is kept), and a squash or merge commit of the engineer's own pull request is dropped in favour of the pull request. See the [resume-collect spec](2026-09-25-resume-collect-design.md#links-and-duplicates).

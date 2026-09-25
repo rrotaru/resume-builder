@@ -42,9 +42,26 @@ def test_links_resolve_only_to_evidence_ignoring_case():
     records, duplicates = merge.build([pr, epic, issue])
     by_key = {r["native_key"]: r for r in records}
     assert duplicates == 0
-    assert by_key["Acme/Pay#7"]["links"] == sorted([by_key["PAY-42"]["id"], by_key["acme/pay#8"]["id"]])
-    assert [r["native_key"] for r in records] == ["PAY-42", "Acme/Pay#7", "acme/pay#8"]
+    assert by_key["acme/pay#7"]["links"] == sorted([by_key["PAY-42"]["id"], by_key["acme/pay#8"]["id"]])
+    assert [r["native_key"] for r in records] == ["PAY-42", "acme/pay#7", "acme/pay#8"]
     assert by_key["PAY-42"]["id"] == ids.evidence_id("jira", "PAY-42")
+
+
+def test_ids_do_not_depend_on_how_a_source_spells_the_key():
+    """The same item spelled differently by two sources, or by two runs, keeps one ID."""
+    for spelling in ("Acme/Pay#7", "acme/pay#7", "ACME/PAY#7"):
+        records, _ = merge.build([draft("github", spelling), draft("gitlab", spelling.replace("#", "!")),
+                                  draft("jira", "pay-42", role="assignee", kind="epic")])
+        assert {r["native_key"]: r["id"] for r in records} == {
+            "acme/pay#7": ids.evidence_id("github", "acme/pay#7"),
+            "acme/pay!7": ids.evidence_id("gitlab", "acme/pay!7"),
+            "PAY-42": ids.evidence_id("jira", "PAY-42"),
+        }
+    review = draft("github", "Acme/Pay#7", role="reviewer", kind="review")
+    authored = draft("github", "ACME/pay#7")
+    for order in ([review, authored], [authored, review]):
+        (record,), _ = merge.build(order)
+        assert (record["native_key"], record["id"]) == ("acme/pay#7", ids.evidence_id("github", "acme/pay#7"))
 
 
 def test_same_item_twice_keeps_the_stronger_role():

@@ -7,7 +7,11 @@ from .common import ROLE_RANK, Draft
 
 
 def key_of(source: str, native_key: str) -> tuple[str, str]:
-    """Lookup key: GitHub and GitLab paths ignore case, Jira keys are upper case."""
+    """The canonical (source, native_key): GitHub and GitLab paths in lower case, Jira keys in upper case.
+
+    Evidence stores this form and hashes it into the ID, so the ID does not
+    depend on how a source happened to spell the repository or the key.
+    """
     if source in ("github", "gitlab"):
         return source, native_key.casefold()
     if source == "jira":
@@ -61,12 +65,13 @@ def build(drafts: list[Draft]) -> tuple[list[dict], int]:
     """Evidence records sorted by created_at then id, and the number of duplicates removed."""
     merged, copies = _merge_copies(drafts)
     kept, commits = _drop_merged_commits(merged)
+    for draft in kept:
+        draft.native_key = key_of(draft.source, draft.native_key)[1]
     id_of = ids.assign_evidence_ids((d.source, d.native_key) for d in kept)
-    lookup = {key_of(d.source, d.native_key): id_of[(d.source, d.native_key)] for d in kept}
     records = []
     for draft in kept:
         own = id_of[(draft.source, draft.native_key)]
-        links = {lookup[key_of(*ref)] for ref in draft.refs if key_of(*ref) in lookup} - {own}
+        links = {id_of[key_of(*ref)] for ref in draft.refs if key_of(*ref) in id_of} - {own}
         records.append(draft.record(own, sorted(links)))
     records.sort(key=lambda r: (r["created_at"], r["id"]))
     return records, copies + commits

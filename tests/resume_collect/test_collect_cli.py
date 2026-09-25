@@ -233,8 +233,8 @@ def test_normalize_exit_3_shows_queries_and_authors(workspace, capsys):
         "  filtered: 2 not jriv's",
         "github: none of the items in 01-raw/github.jsonl belongs to 'jriv'",
         "  queries used:",
-        "    is:pr author:jrivera created:>=2023-01-01",
-        "    is:pr reviewed-by:jrivera -author:jrivera created:>=2023-01-01",
+        "    is:pr author:jrivera updated:>=2023-01-01",
+        "    is:pr reviewed-by:jrivera -author:jrivera updated:>=2023-01-01",
         "  most frequent authors seen: jrivera (1), mchen (1)",
         "  ask the engineer for another username or email, or check the time range; never guess",
     ]
