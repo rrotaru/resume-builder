@@ -22,7 +22,12 @@ def default_config(target_role: str = "") -> dict:
 
 def metric_prompt_count(project_count: int, percent: float = 0.30,
                         minimum: int = 3, maximum: int = 8) -> int:
-    """N = min(project_count, clamp(ceil(percent * project_count), minimum, maximum))."""
+    """N = min(project_count, clamp(ceil(percent * project_count), minimum, maximum)).
+
+    Raises ValueError if minimum is greater than maximum.
+    """
+    if minimum > maximum:
+        raise ValueError(f"metric prompts: minimum {minimum} is greater than maximum {maximum}")
     if project_count <= 0:
         return 0
     n = math.ceil(round(percent * project_count, 9))

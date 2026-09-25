@@ -27,3 +27,8 @@ def test_default_config_returns_independent_copies():
     a = config.default_config()
     a["metric_prompts"]["max"] = 99
     assert config.default_config()["metric_prompts"]["max"] == 8
+
+
+def test_metric_prompt_count_rejects_minimum_above_maximum():
+    with pytest.raises(ValueError, match="minimum 5 is greater than maximum 2"):
+        config.metric_prompt_count(10, minimum=5, maximum=2)

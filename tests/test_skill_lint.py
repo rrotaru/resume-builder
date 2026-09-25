@@ -48,9 +48,10 @@ def test_no_harness_specific_constructs(skill):
 
 @pytest.mark.parametrize("skill", SKILL_DIRS, ids=lambda p: p.name)
 def test_cross_skill_references_only_to_resume_core(skill):
-    text = (skill / "SKILL.md").read_text(encoding="utf-8")
-    for name in re.findall(r"\.\./([A-Za-z0-9_-]+)/", text):
-        assert name == "resume-core", f"{skill.name} references ../{name}/"
+    for path in [skill / "SKILL.md", *skill.glob("scripts/**/*.py")]:
+        text = path.read_text(encoding="utf-8")
+        for name in re.findall(r"\.\./([A-Za-z0-9_-]+)/", text):
+            assert name == "resume-core", f"{path.relative_to(SKILLS)} references ../{name}/"
 
 
 @pytest.mark.parametrize("skill", SKILL_DIRS, ids=lambda p: p.name)

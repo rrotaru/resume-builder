@@ -2,7 +2,7 @@
 # requires-python = ">=3.10"
 # dependencies = []
 # ///
-"""Fail if a job version has flagged rewrites the engineer has not accepted or edited.
+"""Fail if a job version has unattested flagged rewrites or bullets changed after the claim diff.
 
 Usage: uv run check_flags.py --workspace WS JOB_SLUG [JOB_SLUG ...]
 """

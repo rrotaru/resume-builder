@@ -115,9 +115,9 @@ resume-workspace/
 
 A stage is **stale** when any recorded input hash no longer matches, an input is gone, or an input lives in a stage that is itself stale. `resume-build` uses this to offer reuse or rebuild. A standalone command warns before consuming stale inputs.
 
-**Atomic writes.** A stage writes to `<stage>.tmp/`, validates, then renames into place. On failure the previous stage output remains intact.
+**Safe writes.** A stage writes to `<stage>.tmp/`, validates, then renames into place (the previous output is renamed to `<stage>.old/` and deleted after the swap). On failure the previous stage output remains intact. If a swap is interrupted, leaving `<stage>.old/` but no `<stage>/`, the next `begin`, `commit` or `status` renames `<stage>.old/` back. `stage.py begin <stage> --from-current` starts the tmp folder as a copy of the committed `<stage>/` (without `_stage.json`), so a skill can replace one part of a stage, such as one job's folder in `08-ats/jobs/`, and keep the rest. `stage.py commit` accepts only workspace-relative inputs (no absolute paths, no `..`) and takes `--extra '<JSON object>'`, stored as `extra` in `_stage.json` (for example a skipped-row count).
 
-**Privacy.** `resume-init` warns if the workspace is inside a git repository and adds it to `.git/info/exclude`.
+**Privacy.** If the workspace is inside a git repository, `resume-init` adds it to the repository's `info/exclude` (special gitignore characters escaped). If the workspace is inside a repository but could not be excluded (it is the repository root, or git failed), it warns the engineer not to commit it.
 
 ## Data contracts
 
@@ -166,7 +166,7 @@ All files are JSON or JSONL and validated against `resume-core/schemas`.
 ```
 
 - `form`: `xyz_quantified | xyz`
-- Each `sources` entry is `ev_<id>`, `metric:<id>`, `resume:<json-pointer>` (into `03-profile/profile.json`), or `wizard:<json-pointer>` (into `decisions/profile.json`).
+- Each `sources` entry is `ev_<id>`, `metric:<id>`, `resume:<json-pointer>` (into `03-profile/profile.json`), or `wizard:<json-pointer>` (into `decisions/profile.json`). A pointer must start with `/` and resolve to a single string or number, never an object, array, boolean or null.
 - Bullets for earlier roles set `work_ref` (index into profile `work`) and cite `resume:` sources.
 
 ### Decisions
@@ -183,14 +183,30 @@ An attestation applies only while the bullet's text hash matches, so any later e
 
 ### Tailored resume (`08-ats/.../resume.json`)
 
-JSON Resume where each `work` and `projects` entry has an `x-highlights` array of `{bullet_id, text, sources}`, and `highlights` holds the same texts in the same order (JSON Resume highlights are plain strings, so the sourcing lives alongside them). This is the only input to rendering. `report.json` holds ATS lint results and keyword coverage. `flags.json` (job versions only) lists rewritten bullets whose claims are not supported by their sources.
+JSON Resume restricted to a closed list of sections, validated by `tailored-resume.schema.json` (profile files keep the open `resume.schema.json`):
+
+- Top level: only `basics`, `work`, `projects`, `education`, `certificates` and `skills`. Any other section (for example `volunteer` or `awards`) fails validation.
+- Each `work` and `projects` entry has an `x-highlights` array of `{bullet_id, text, sources}` (it may be empty), and `highlights` holds the same texts in the same order (JSON Resume highlights are plain strings, so the sourcing lives alongside them).
+- `education`, `certificates` and `skills` entries carry no `highlights`.
+- If `basics.summary` is present, `basics.x-summary-sources` must be present and non-empty; the source check treats the summary as a bullet with id `summary`.
+
+This is the only input to rendering. `report.json` holds ATS lint results and keyword coverage.
+
+`flags.json` (job versions only) is the claim diff's result:
+
+```json
+{"checked": {"b_1": "<text_sha256>", "b_2": "<text_sha256>"},
+ "flags": [{"bullet_id": "b_1", "text": "...", "text_sha256": "...", "reasons": ["..."]}]}
+```
+
+`checked` holds the hash of every bullet the claim diff examined, flagged or not; `flags` lists rewrites whose claims are not supported by their sources. `check_flags.py` passes a bullet in the job's `resume.json` only if its current text hash is attested for that job, or it is unflagged and `checked` holds its current hash. A flagged bullet whose hash matches the flag must be accepted, reverted or edited. Any other bullet changed after the claim diff, which must be re-run. A flag or `checked` entry for a bullet no longer in `resume.json`, or a `bullet_id` used twice in one resume, is an error.
 
 ## Skills
 
 The pattern: scripts handle anything that must be exact (parsing, IDs, checks); the model handles anything that needs judgment (grouping, role, wording).
 
 ### resume-init
-Checks for `uv` and Python ≥ 3.10 and walks the engineer through installing whatever is missing. Creates the workspace and default `config.json`. Chromium is installed lazily at first render.
+Checks for `uv` and walks the engineer through installing it if missing. uv supplies Python ≥ 3.10 from each script's `requires-python`, so Python itself needs no separate check. Creates the workspace and default `config.json`. Chromium is installed lazily at first render.
 
 ### resume-collect (checkpoint 1)
 - **Model:** identifies available connectors resembling GitHub, GitLab or Jira. Confirms with the engineer: sources, time range, usernames per system, local repo paths, review export folder, existing resume path, and the data notice. Pulls PRs/MRs, reviews, issues, tickets and epics via connectors into `01-raw/<source>.jsonl` as fetched.
@@ -209,6 +225,7 @@ Checks for `uv` and Python ≥ 3.10 and walks the engineer through installing wh
 ### resume-sanitize
 - **Scan** (before the wizard): finds candidate sensitive terms in projects, evidence excerpts and the profile, and proposes generalizations into `05-terms/candidates.json`.
 - **Apply** (after write): applies `decisions/terms.json` to bullets and profile, writing `07-sanitized/`. Newly detected terms go to `new-terms.json` for checkpoint 4.
+- **Terms check** (`check_terms.py`, used here and by render) matches strictly. Terms and text are both normalized: Unicode NFKC, zero-width characters (U+200B, U+200C, U+200D, U+2060, U+FEFF) removed, then case-folded. A term's words may be separated by any run of whitespace, hyphens or underscores, or by nothing, so `Project Falcon` also matches `Project-Falcon`, `ProjectFalcon` and a term broken across a line. An optional plural `s`/`es` still matches (`Falcons`), but a longer word does not (`Falconry`). Text files are scanned as one string and each match is reported with the line where it starts. The check fails closed: a missing or invalid `decisions/terms.json` is an error.
 
 ### resume-wizard (checkpoint 3)
 A single session for: metric values for `metric_prompt` projects, missing profile fields (contact details, dates, education), and term approvals from `05-terms/candidates.json`. Writes only to `decisions/`. Skips items already answered in earlier runs.
@@ -218,12 +235,12 @@ Writes XYZ bullets per project: `xyz_quantified` when a confirmed metric exists,
 
 ### resume-ats
 - **General:** selects and orders bullets and projects, normalizes section headings and date formats, and enforces length (1 page under about 8 years of experience, else 2). Keywords come from the target role in `config.json`. Wording changes must stay supported by the cited sources.
-- **Per job (`--jd <file>`):** free rewriting against the posting. `diff_claims.py` compares each rewrite with its original bullet and sources and writes `flags.json` for any skill, technology, number or scope not present in them. `keywords.py` reports posting terms: covered, missing with evidence, missing without evidence.
+- **Per job (`--jd <file>`):** free rewriting against the posting. `diff_claims.py` compares each rewrite with its original bullet and sources, records every examined bullet's text hash in `flags.json` `checked`, and flags any skill, technology, number or scope not present in them. To rebuild one job, begin `08-ats` with `--from-current` and replace only that job's folder. `keywords.py` reports posting terms: covered, missing with evidence, missing without evidence.
 - `ats_lint.py` handles the checks that don't need judgment (headings, dates, no tables or columns in the template).
 
 ### resume-render
 1. Runs `check_terms.py`, `check_sources.py`, and (for job versions) `check_flags.py`. Any failure means no output, and a list of failing records with the command that fixes each.
-2. Fills `templates/classic.html` and prints the PDF via Playwright/Chromium. Builds the DOCX via `python-docx` with the same section order, and the TXT.
+2. Fills `templates/classic.html` and prints the PDF via Playwright/Chromium. Builds the DOCX via `python-docx` with the same section order, and the TXT. Renders only the tailored resume's sections (`basics`, `work`, `projects`, `education`, `certificates`, `skills`); `highlights` render only for `work` and `projects`, and the summary only when it is sourced.
 3. Copies `stories.md` to `out/`.
 
 If Chromium is unavailable, offers to install it. DOCX and TXT still render without it.
@@ -243,7 +260,7 @@ Every checkpoint persists its choices to `decisions/`, so an interrupted run res
 
 | Case | Behavior |
 |---|---|
-| Stage fails midway | `<stage>.tmp/` discarded; previous output intact. |
+| Stage fails midway | `<stage>.tmp/` discarded; previous output intact. An interrupted swap is undone by the next `begin`, `commit` or `status`. |
 | Validation fails | Names file, record ID and rule. Skills never skip or weaken a check. |
 | No connector for a source | Ask for an export path or skip. Recorded in `config.json`. |
 | Connector fails partway | Keep fetched pages in `01-raw/<source>.partial.jsonl` with a cursor. Offer retry, continue without the source, or pause. |
