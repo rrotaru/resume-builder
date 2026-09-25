@@ -87,14 +87,29 @@ def check_bullets(bullets: list[dict], known: KnownSources, label: str) -> list[
 
 
 def check_resume(resume: dict, known: KnownSources, label: str) -> list[str]:
-    """Check a tailored resume: highlights mirror x-highlights, and each is sourced."""
+    """Check a resume document.
+
+    - In work and projects, highlights must equal the x-highlights texts, in order.
+    - education, certificates and skills entries may not carry highlights
+      (they would render with no sources).
+    - Each x-highlight, and basics.summary if present (as bullet "summary",
+      citing basics.x-summary-sources), must cite sources that resolve.
+    """
     errors = []
     for section in ("work", "projects"):
         for i, entry in enumerate(resume.get(section, [])):
             texts = [h.get("text") for h in entry.get("x-highlights", [])]
             if entry.get("highlights", []) != texts:
                 errors.append(f"{label}: /{section}/{i}: highlights do not match x-highlights")
-    bullets = [
+    for section in ("education", "certificates", "skills"):
+        for i, entry in enumerate(resume.get(section, [])):
+            if isinstance(entry, dict) and "highlights" in entry:
+                errors.append(f"{label}: /{section}/{i}: highlights are only allowed in work and projects")
+    bullets = []
+    basics = resume.get("basics", {})
+    if isinstance(basics, dict) and "summary" in basics:
+        bullets.append({"id": "summary", "sources": basics.get("x-summary-sources")})
+    bullets += [
         {"id": h.get("bullet_id"), "sources": h.get("sources")}
         for _, h in wsio.resume_highlights(resume)
     ]

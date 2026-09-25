@@ -108,3 +108,51 @@ def test_unreadable_known_source_file_is_reported(workspace):
     (workspace / "decisions" / "metrics.json").write_bytes(b"\xff\xfe")
     errors = sources.check_file(workspace, "07-sanitized/bullets.json")
     assert errors[0] == "decisions/metrics.json: not UTF-8 text"
+
+
+def _edit_general(workspace, change):
+    path = workspace / TAILORED[0]
+    resume = wsio.read_json(path)
+    change(resume)
+    wsio.write_json(path, resume)
+
+
+def test_summary_without_sources_fails(workspace):
+    _edit_general(workspace, lambda r: r["basics"].update(summary="Backend engineer"))
+    assert sources.check_file(workspace, TAILORED[0]) == [
+        "08-ats/general/resume.json: bullet summary: has no sources"
+    ]
+
+
+def test_summary_with_valid_sources_passes(workspace):
+    _edit_general(workspace, lambda r: r["basics"].update(
+        summary="Backend engineer", **{"x-summary-sources": ["resume:/basics/label", "ev_191cc8ce"]}))
+    assert sources.check_file(workspace, TAILORED[0]) == []
+
+
+def test_summary_with_unresolved_source_fails(workspace):
+    _edit_general(workspace, lambda r: r["basics"].update(
+        summary="Backend engineer", **{"x-summary-sources": ["resume:/basics"]}))
+    assert sources.check_file(workspace, TAILORED[0]) == [
+        "08-ats/general/resume.json: bullet summary: resume:/basics: "
+        "must point to a single value in 03-profile/profile.json"
+    ]
+
+
+def test_highlights_outside_work_and_projects_fail(workspace):
+    def change(resume):
+        resume["education"][0]["highlights"] = ["Graduated top of class"]
+        resume["skills"][0]["highlights"] = ["Unsourced claim"]
+    _edit_general(workspace, change)
+    assert sources.check_file(workspace, TAILORED[0]) == [
+        "08-ats/general/resume.json: /education/0: highlights are only allowed in work and projects",
+        "08-ats/general/resume.json: /skills/0: highlights are only allowed in work and projects",
+    ]
+
+
+def test_project_highlights_must_match_x_highlights(workspace):
+    _edit_general(workspace, lambda r: r.update(projects=[
+        {"name": "Side project", "highlights": ["Unsourced"], "x-highlights": []}]))
+    assert sources.check_file(workspace, TAILORED[0]) == [
+        "08-ats/general/resume.json: /projects/0: highlights do not match x-highlights"
+    ]

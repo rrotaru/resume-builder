@@ -1,16 +1,28 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "Unsupported claims in a job-specific resume (08-ats/jobs/<slug>/flags.json)",
-  "type": "array",
-  "items": {
-    "type": "object",
-    "required": ["bullet_id", "text", "text_sha256", "reasons"],
-    "additionalProperties": false,
-    "properties": {
-      "bullet_id": {"type": "string", "pattern": "^b_[A-Za-z0-9_-]+$"},
-      "text": {"type": "string", "minLength": 1},
-      "text_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
-      "reasons": {"type": "array", "minItems": 1, "items": {"type": "string"}}
+  "title": "Claim diff result for a job-specific resume (08-ats/jobs/<slug>/flags.json)",
+  "description": "checked maps every bullet_id the claim diff examined, flagged or not, to the sha256 of the text it examined. flags lists the rewrites whose claims the cited sources do not support.",
+  "type": "object",
+  "required": ["checked", "flags"],
+  "additionalProperties": false,
+  "properties": {
+    "checked": {
+      "type": "object",
+      "additionalProperties": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+    },
+    "flags": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["bullet_id", "text", "text_sha256", "reasons"],
+        "additionalProperties": false,
+        "properties": {
+          "bullet_id": {"type": "string", "pattern": "^b_[A-Za-z0-9_-]+$"},
+          "text": {"type": "string", "minLength": 1},
+          "text_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "reasons": {"type": "array", "minItems": 1, "items": {"type": "string"}}
+        }
+      }
     }
   }
 }

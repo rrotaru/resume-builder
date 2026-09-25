@@ -72,3 +72,35 @@ def test_non_utf8_file_is_reported(workspace):
     assert validation.validate_paths(workspace, ["04-projects/projects.json"]) == [
         "04-projects/projects.json: not UTF-8 text"
     ]
+
+
+GENERAL = "08-ats/general/resume.json"
+
+
+def _edit(workspace, change):
+    resume = wsio.read_json(workspace / GENERAL)
+    change(resume)
+    wsio.write_json(workspace / GENERAL, resume)
+    return validation.validate_paths(workspace, [GENERAL])
+
+
+def test_tailored_resumes_use_the_closed_schema():
+    assert validation.schema_for(GENERAL) == ("tailored-resume", "json")
+    assert validation.schema_for("08-ats/jobs/acme/resume.json") == ("tailored-resume", "json")
+    assert validation.schema_for("03-profile/profile.json") == ("resume", "json")
+
+
+def test_tailored_resume_rejects_unknown_section(workspace):
+    errors = _edit(workspace, lambda r: r.update(volunteer=[{"organization": "X", "highlights": ["Y"]}]))
+    assert errors == [f"{GENERAL}: $.volunteer: unexpected property"]
+
+
+def test_tailored_resume_work_entry_needs_x_highlights(workspace):
+    errors = _edit(workspace, lambda r: r["work"][1].pop("x-highlights"))
+    assert errors == [f"{GENERAL}: $.work[1]: missing required property 'x-highlights'"]
+
+
+def test_tailored_resume_summary_sources_cannot_be_empty(workspace):
+    errors = _edit(workspace, lambda r: r["basics"].update(
+        summary="Backend engineer", **{"x-summary-sources": []}))
+    assert errors == [f"{GENERAL}: $.basics.x-summary-sources: needs at least 1 items"]
