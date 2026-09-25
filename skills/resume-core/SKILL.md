@@ -57,19 +57,37 @@ A `resume:` or `wizard:` pointer must start with `/` and point to a single strin
 
 ## Tailored resumes and job flags
 
-- `08-ats/general/resume.json` and `08-ats/jobs/<slug>/resume.json` follow `schemas/tailored-resume.schema.json`. Only the sections `basics`, `work`, `projects`, `education`, `certificates` and `skills` are allowed. Every `work` and `projects` entry has `x-highlights` (`{bullet_id, text, sources}`, possibly empty) and `highlights` holding the same texts in order. Other sections carry no `highlights`. A `basics.summary` needs a non-empty `basics.x-summary-sources`. Every object accepts only the fields listed in the schema: `work` and `projects` entries have no `summary` or `description` (claims go in sourced highlights). `basics.label`, if present, must equal `config.json` `target_role` or the imported profile's `basics.label`.
+- `08-ats/general/resume.json` and `08-ats/jobs/<slug>/resume.json` follow `schemas/tailored-resume.schema.json`. Only the sections `basics`, `work`, `projects`, `education`, `certificates` and `skills` are allowed. Every `work` and `projects` entry has `x-highlights` (`{bullet_id, text, sources}`, possibly empty) and `highlights` holding the same texts in order. Other sections carry no `highlights`. A `basics.summary` needs a non-empty `basics.x-summary-sources`. Every object accepts only the fields listed in the schema: `work` and `projects` entries have no `summary` or `description` (claims go in sourced highlights), and entries carry no `x-sources`. `basics.label`, if present, must equal `config.json` `target_role` or the profile's `basics.label`.
+- Every other field that is not a bullet is a **fact field** (name, contact details, employer, title, dates, degree, institution, certificate, skill name, level and keywords) and must be copied from the profile, as described below. Never write or reword a fact field in a tailored resume; if the profile is wrong, the engineer corrects it through the wizard.
 - `08-ats/jobs/<slug>/flags.json` is `{"checked": {"<bullet_id>": "<text_sha256>"}, "flags": [...]}`. The claim diff records in `checked` the hash of every bullet it examined, flagged or not, and lists unsupported claims in `flags`.
+
+## The profile
+
+The profile is `03-profile/profile.json` with `decisions/profile.json` laid over it (`rcore.profile.effective_profile`):
+
+- Two objects merge key by key.
+- Two arrays of objects merge by index: wizard item *i* merges onto imported item *i*, items past the end are added, and `{}` leaves an imported item unchanged. So `"work": [{}, {"endDate": "2022-12"}]` fills in the second job's end date.
+- Two other arrays (such as `keywords`) combine: imported items, then wizard items not already present.
+- Otherwise the wizard's value replaces the imported one.
+
+A tailored resume's fact fields must match it:
+
+- Each `basics` field equals the profile's value; each `location` key equals the profile's; each `profiles` item equals some profile item in every field it has.
+- Each entry in `work`, `projects`, `education`, `certificates` and `skills` matches one profile entry of the same section: every fact field it has, that entry has with the same value (exact text); `keywords` holds only that entry's keywords, in any order; other fields may be left out.
+- A date may be shortened (`2023-01-15` as `2023-01` or `2023`), never lengthened, and an entry has a date field exactly when its profile entry does, so a past job cannot lose its `endDate`.
+
+A confidential term in a fact field (for example a codename used as a project name) is fixed with a wizard answer at that path in `decisions/profile.json`, never by rewording the tailored resume.
 
 ## Checks
 
 | Script | Fails when |
 |---|---|
 | `validate.py [PATH ...]` | a file does not match its schema in `schemas/`, or an array has duplicate `id`s |
-| `check_sources.py FILE ...` | a bullet (or a resume's `summary`) has no sources or cites one that does not resolve; a resume's `highlights` differ from its `x-highlights` texts; `education`, `certificates` or `skills` carry `highlights`; a tailored resume's `basics.label` is neither the target role nor the imported profile's label |
+| `check_sources.py FILE ...` | a bullet (or a resume's `summary`) has no sources or cites one that does not resolve; a resume's `highlights` differ from its `x-highlights` texts; `education`, `certificates` or `skills` carry `highlights`; a tailored resume's `basics.label` is neither the target role nor the profile's label, or one of its fact fields is not copied from the profile |
 | `check_terms.py FILE ...` | text contains a term from `decisions/terms.json` whose `replacement` is not null, or `decisions/terms.json` is missing or invalid |
 | `check_flags.py JOB ...` | a bullet in `08-ats/jobs/<JOB>/resume.json` is flagged with no matching attestation, or changed after the claim diff, or a flag names a bullet that is gone |
 
-Each prints one line per problem (file, record and rule) and exits 1 on failure. `validate.py` and `check_sources.py` normalize each path first (`./`, `//`, `.` and `..` segments, or an absolute path inside the workspace), and report a path outside the workspace as an error. `check_sources.py` applies the tailored-resume checks to every resume object except the profile files (`03-profile/profile.json`, `07-sanitized/profile.json`, `decisions/profile.json`). A missing, non-UTF-8 or invalid-JSON file is reported as a problem line, not a crash.
+Each prints one line per problem (file, record and rule) and exits 1 on failure. `validate.py` and `check_sources.py` normalize each path first (`./`, `//`, `.` and `..` segments, or an absolute path inside the workspace), and report a path outside the workspace as an error. `check_sources.py` applies the tailored-resume checks to every resume object except the profile files (`03-profile/profile.json`, `07-sanitized/profile.json`, `decisions/profile.json`). A missing, non-UTF-8 or invalid-JSON file is reported as a problem line, not a crash, and so is a resume that does not match its schema (`<file>: does not match its schema; run validate.py`). Run `validate.py` first to see why.
 
 The terms check is strict: it matches after Unicode NFKC normalization, removal of invisible characters (format characters such as zero-width spaces and soft hyphens, variation selectors, Hangul fillers, tag characters and the Braille blank) and case folding; the words of a term may be joined by any run of spaces, line breaks, underscores, dashes, minus signs, full stops, slashes, backslashes, middle dots, bullets or similar slash and dot lookalikes, or by nothing; and for terms of 5 or more letters a plural `s`/`es` still matches. So `Project-Falcon`, `Project.Falcon`, `ProjectFalcon` and `Falcons` are all caught.
 
@@ -94,4 +112,5 @@ from rcore import ids, stages, wsio  # noqa: E402
 
 `ids.evidence_id(source, native_key)`, `ids.assign_evidence_ids(keys)`, `ids.project_id(evidence_ids)`,
 `ids.text_sha256(text)`, `config.metric_prompt_count(n, percent, minimum, maximum)`,
+`profile.effective_profile(workspace)`, `profile.overlay(imported, wizard)`,
 `wsio.read_json / write_json / read_jsonl / write_jsonl / resolve_pointer`.

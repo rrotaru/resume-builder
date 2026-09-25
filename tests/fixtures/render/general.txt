@@ -1,0 +1,34 @@
+Jordan Rivera
+Senior Backend Engineer
+jordan.rivera@example.com | https://github.com/jrivera | Denver, CO
+
+EXPERIENCE
+
+Senior Software Engineer, Northwind Payments
+Jan 2023 - Present
+- Cut p99 checkout latency 40% for a top-10 US bank by building a Redis-backed idempotency cache in Go
+- Mentored two new engineers through on-call onboarding
+
+Software Engineer, Tailspin Toys
+Jun 2019 - Dec 2022
+- Migrated the order service from PHP to Go, serving 2M requests per day
+
+PROJECTS
+
+ledger-lint
+Apr 2021 - Present | https://github.com/jrivera/ledger-lint
+- Built ledger-lint, an open-source linter for double-entry ledger files with 300 GitHub stars
+
+SKILLS
+
+Backend: Go, Python, Redis, PostgreSQL
+
+EDUCATION
+
+BS, Computer Science, State University
+2019
+
+CERTIFICATIONS
+
+AWS Certified Solutions Architect - Associate, Amazon Web Services
+May 2024

@@ -5,5 +5,12 @@
       "city": "Denver",
       "region": "CO"
     }
-  }
+  },
+  "certificates": [
+    {
+      "name": "AWS Certified Solutions Architect - Associate",
+      "issuer": "Amazon Web Services",
+      "date": "2024-05"
+    }
+  ]
 }

@@ -30,5 +30,15 @@
     "sources": [
       "resume:/work/1/highlights/0"
     ]
+  },
+  {
+    "id": "b_4",
+    "project_id": null,
+    "work_ref": null,
+    "text": "Built ledger-lint, an open-source linter for double-entry ledger files with 300 GitHub stars",
+    "form": "xyz",
+    "sources": [
+      "resume:/projects/0/description"
+    ]
   }
 ]

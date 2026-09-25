@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Tailored resume (08-ats/general/resume.json, 08-ats/jobs/<slug>/resume.json)",
-  "description": "The only input to rendering. Every object is closed to an allowlist of fields. Every work and projects entry carries x-highlights; claims live only in sourced highlights and the sourced summary (presence is enforced by check_sources.py, which also checks basics.label against the target role).",
+  "description": "The only input to rendering. Every object is closed to an allowlist of fields. Every work and projects entry carries x-highlights; claims live only in sourced highlights and the sourced summary (presence is enforced by check_sources.py). check_sources.py also matches every other field against the profile, so entries carry no x-sources.",
   "type": "object",
   "additionalProperties": false,
   "properties": {
@@ -38,8 +38,7 @@
           }
         },
         "summary": {"type": "string", "minLength": 1},
-        "x-summary-sources": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/sourceRef"}},
-        "x-sources": {"$ref": "#/$defs/sources"}
+        "x-summary-sources": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/sourceRef"}}
       }
     },
     "work": {"type": "array", "items": {"$ref": "#/$defs/entry"}},
@@ -65,8 +64,7 @@
         "studyType": {"type": "string"},
         "startDate": {"$ref": "#/$defs/date"},
         "endDate": {"$ref": "#/$defs/date"},
-        "score": {"type": "string"},
-        "x-sources": {"$ref": "#/$defs/sources"}
+        "score": {"type": "string"}
       }
     },
     "certificate": {
@@ -76,8 +74,7 @@
         "name": {"type": "string"},
         "date": {"$ref": "#/$defs/date"},
         "issuer": {"type": "string"},
-        "url": {"type": "string"},
-        "x-sources": {"$ref": "#/$defs/sources"}
+        "url": {"type": "string"}
       }
     },
     "skill": {
@@ -86,8 +83,7 @@
       "properties": {
         "name": {"type": "string"},
         "level": {"type": "string"},
-        "keywords": {"type": "array", "items": {"type": "string"}},
-        "x-sources": {"$ref": "#/$defs/sources"}
+        "keywords": {"type": "array", "items": {"type": "string"}}
       }
     },
     "entry": {
@@ -102,7 +98,6 @@
         "startDate": {"$ref": "#/$defs/date"},
         "endDate": {"$ref": "#/$defs/date"},
         "highlights": {"type": "array", "items": {"type": "string"}},
-        "x-sources": {"$ref": "#/$defs/sources"},
         "x-highlights": {
           "type": "array",
           "items": {
