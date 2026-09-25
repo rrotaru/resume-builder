@@ -32,6 +32,7 @@
       }
     },
     "local_repos": {"type": "array", "items": {"type": "string", "minLength": 1}},
+    "git_authors": {"type": "array", "items": {"type": "string", "minLength": 1}},
     "reviews_dir": {"type": ["string", "null"]},
     "resume_path": {"type": ["string", "null"]},
     "metric_prompts": {

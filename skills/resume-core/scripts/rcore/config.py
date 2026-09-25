@@ -14,6 +14,7 @@ def default_config(target_role: str = "") -> dict:
         "time_range": {"start": None, "end": None},
         "sources": [],
         "local_repos": [],
+        "git_authors": [],
         "reviews_dir": None,
         "resume_path": None,
         "metric_prompts": dict(DEFAULT_METRIC_PROMPTS),

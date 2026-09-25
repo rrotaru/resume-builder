@@ -116,4 +116,7 @@ from rcore import ids, stages, wsio  # noqa: E402
 `ids.text_sha256(text)`, `config.metric_prompt_count(n, percent, minimum, maximum)`,
 `config.resolve_path(workspace, value)` (a relative path in `config.json` is relative to the workspace),
 `profile.effective_profile(workspace)`, `profile.overlay(imported, wizard)`,
-`wsio.read_json / write_json / read_jsonl / write_jsonl / resolve_pointer`.
+`wsio.read_json / write_json / read_jsonl / write_jsonl / resolve_pointer`,
+`documents.extract(data, fmt, name)` (the normalized text of a PDF, DOCX, TXT or Markdown file's bytes).
+
+`rcore` imports only the standard library. `documents` imports `pypdf` or `python-docx` only when it reads a PDF or DOCX, so a script that reads those formats pins them in its PEP 723 block, at the versions `render.py` pins.

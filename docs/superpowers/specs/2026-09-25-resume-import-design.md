@@ -42,7 +42,8 @@ skills/resume-import/
     extract_text.py        # CLI: resolve the file, begin 03-profile, extract or load
     check_profile.py       # CLI: faithfulness check, index-shift warnings, commit
     rimport/
-      extract.py           # PDF, DOCX, TXT and Markdown text (pypdf and python-docx imported here only)
+      extract.py           # PDF, DOCX, TXT and Markdown text (pypdf and python-docx imported here only;
+                           # moved to rcore/documents.py by the resume-collect spec)
       jsonresume.py        # JSON Resume loading and cleanup
       dates.py             # dates a text states
       match.py             # whether a value appears in a text

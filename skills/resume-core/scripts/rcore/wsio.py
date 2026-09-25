@@ -27,7 +27,8 @@ class JsonlError(ValueError):
 
 def _parse_jsonl(text: str, label: str) -> list:
     records = []
-    for lineno, line in enumerate(text.splitlines(), start=1):
+    # Split on "\n" only: str.splitlines() also breaks on U+2028, \x1c and others inside strings.
+    for lineno, line in enumerate(text.split("\n"), start=1):
         if not line.strip():
             continue
         try:
@@ -70,11 +71,17 @@ def load(workspace: Path, rel: str, fmt: str = "json"):
     return text, None
 
 
+def _jsonl_line(record) -> str:
+    # json.dumps escapes control characters below U+0020 but not U+0085, U+2028 or U+2029,
+    # which str.splitlines() also breaks on; escape them so every reader keeps the line whole.
+    text = json.dumps(record, ensure_ascii=False, sort_keys=True)
+    return text.replace("\x85", "\\u0085").replace("\u2028", "\\u2028").replace("\u2029", "\\u2029")
+
+
 def write_jsonl(path: Path, records) -> None:
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    lines = [json.dumps(r, ensure_ascii=False, sort_keys=True) for r in records]
-    path.write_text("".join(line + "\n" for line in lines), encoding="utf-8")
+    path.write_text("".join(_jsonl_line(r) + "\n" for r in records), encoding="utf-8")
 
 
 def _unescape(token: str) -> str:

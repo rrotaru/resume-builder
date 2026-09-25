@@ -20,6 +20,7 @@
     }
   ],
   "local_repos": [],
+  "git_authors": [],
   "reviews_dir": "reviews",
   "resume_path": "old-resume.pdf",
   "metric_prompts": {
