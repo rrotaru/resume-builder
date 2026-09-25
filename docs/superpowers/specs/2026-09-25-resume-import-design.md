@@ -1,7 +1,7 @@
 # resume-import: Design
 
 - **Date:** 2026-09-25
-- **Status:** Draft, awaiting approval
+- **Status:** Approved
 - **Scope:** The `resume-import` skill: reading the engineer's existing resume (PDF, DOCX, TXT, Markdown or JSON Resume) and writing `03-profile/`. It also covers the check that keeps the profile faithful to the file, and the resume-core changes that check needs. This is follow-up spec 3 of the [architecture spec](2026-09-24-resume-builder-architecture-design.md).
 
 ## Goal
@@ -84,12 +84,12 @@ uv run scripts/check_profile.py --workspace WS [--commit | --committed]
 ### extract_text.py
 
 1. Resolve the path, read the file's bytes once, and hash them. Parsing uses those bytes, so the hash is the hash of what was read.
-2. Choose the format by extension: `.pdf`, `.docx`, `.txt`, `.md` or `.markdown`, `.json`. A PDF must start with `%PDF-` and a DOCX with `PK`. A mismatch is an error, not a guess.
-3. `stages.begin(ws, "03-profile")`.
-4. For a text format, extract the text (see [Extraction](#extraction)), write `resume.txt`, and write `source.json`. Then print a one-line summary and the numbered text.
-5. For JSON Resume, load it (see [JSON Resume](#json-resume)), write `profile.json` and `source.json`, and print a summary with each dropped item.
-6. If `03-profile/source.json` exists and names the same path and hash, print `note: <path> is unchanged since the last import`. The skill asks whether to re-import.
-7. On success with `--resume`, update `config.json`.
+2. Choose the format by extension: `.pdf`, `.docx`, `.txt`, `.md` or `.markdown`, `.json`. A PDF must have `%PDF-` in its first 1024 bytes and a DOCX must start with `PK`. A mismatch is an error, not a guess.
+3. Extract the text (see [Extraction](#extraction)) or load the JSON Resume (see [JSON Resume](#json-resume)). On any failure, exit without touching the workspace.
+4. `stages.begin(ws, "03-profile")`, then write `resume.txt` or `profile.json`, and `source.json`.
+5. If `03-profile/source.json` exists and names the same path and hash, print `note: <path> is unchanged since the last import`. The skill asks whether to re-import.
+6. With `--resume`, update `config.json`.
+7. Print a one-line summary. For a text format, also print the numbered text. For JSON Resume, print each dropped item.
 
 ### check_profile.py
 
@@ -119,10 +119,10 @@ The stage records no inputs, so `stage.py status` always reports `03-profile` as
 
 ## Extraction
 
-`rimport/extract.py` returns the text, the link targets and the page count (PDF only).
+`rimport/extract.py` returns the normalized text, with link targets appended, and the page count (PDF only).
 
 - **PDF:** `pypdf.PdfReader` with plain text extraction, page by page, with pages joined by a blank line. An encrypted file is decrypted with an empty password (many PDFs are "encrypted" only to restrict printing). If that fails, the error is `<path> is password-protected; save an unprotected copy`. Link targets are the `/URI` of each `/Link` annotation's action.
-- **DOCX:** every `w:p` in document order: headers of the first section first (contact details often live there), then the body including table cells and text boxes, then footers. A paragraph's text is its `w:t` runs, with `w:tab` as a space and `w:br` as a line break, excluding text in nested paragraphs (text boxes are visited separately), text hidden with `w:vanish`, and `mc:Fallback` copies of text boxes. Link targets are the external relationships of `w:hyperlink` elements.
+- **DOCX:** every `w:p` in document order: the headers first (contact details often live there), then the body including table cells and text boxes, then the footers. A paragraph's text is its `w:t` runs, with `w:tab` as a space and `w:br` as a line break, excluding text in nested paragraphs (text boxes are visited separately), text hidden with `w:vanish`, and `mc:Fallback` copies of text boxes. Link targets are the external relationships of `w:hyperlink` elements and the URLs of `HYPERLINK` fields.
 - **TXT and Markdown:** decoded as UTF-8 (a UTF-8 BOM is dropped) or as UTF-16 when it starts with a UTF-16 BOM. Anything else fails with `<path> is not UTF-8 text; save it as UTF-8`. Markdown is kept as written, and the model strips the markup when mapping.
 
 Then the text is normalized so that `str.splitlines()` and a plain line count agree, because the model cites lines by number:

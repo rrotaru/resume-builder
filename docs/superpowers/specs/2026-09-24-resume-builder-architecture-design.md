@@ -47,7 +47,7 @@ resume-builder/
       scripts/               # normalize_github.py, normalize_gitlab.py, normalize_jira.py,
                              # ingest_git_log.py, ingest_reviews.py, link.py
     resume-import/
-      scripts/               # extract_text.py
+      scripts/               # extract_text.py, check_profile.py
     resume-analyze/
       scripts/               # signals.py, match_projects.py
     resume-sanitize/
@@ -90,7 +90,7 @@ resume-workspace/
     attestations.json
   01-raw/                # resume-collect: connector output as fetched, one JSONL per source
   02-evidence/           # resume-collect: normalized evidence.jsonl
-  03-profile/            # resume-import: profile.json (JSON Resume)
+  03-profile/            # resume-import: profile.json (JSON Resume), resume.txt, source.json
   04-projects/           # resume-analyze: projects.json, signals.json
   05-terms/              # resume-sanitize scan: candidates.json
   06-bullets/            # resume-write: bullets.json, stories.md
@@ -103,6 +103,8 @@ resume-workspace/
     jobs/<slug>/
     stories.md
 ```
+
+**Config paths.** A relative path in `config.json` (`resume_path`, `reviews_dir`, `local_repos`, `export_path`) is relative to the workspace folder, not to the current directory (`rcore.config.resolve_path`). Scripts that write these paths write absolute paths.
 
 **Ownership.** Each numbered folder is written by exactly one skill. `resume-wizard` writes only to `decisions/`. Checkpoints write engineer choices to `decisions/`.
 
@@ -142,7 +144,7 @@ All files are JSON or JSONL and validated against `resume-core/schemas`.
 
 ### Profile (`03-profile/profile.json`)
 
-[JSON Resume](https://jsonresume.org/schema) with an added `x-sources` array on each entry (for example `["resume:/work/2"]`). Values in `decisions/profile.json` take precedence over imported values. The two are combined as the *effective profile*: objects merge key by key, arrays of objects merge by index (`{}` leaves an imported entry unchanged, extra entries are added), other arrays such as `keywords` combine, and any other wizard value replaces the imported one.
+[JSON Resume](https://jsonresume.org/schema), resume-import's faithful reading of the engineer's resume. For a PDF, DOCX, TXT or Markdown resume, `03-profile/resume.txt` holds the extracted text, and each entry of a top-level array carries `x-lines: {"first": n, "last": m}`, the lines of `resume.txt` it was read from. `check_profile.py` proves that every value appears in those lines and that entries keep the resume's order (see the [resume-import spec](2026-09-25-resume-import-design.md#faithfulness-check)). A JSON Resume file is mapped by a script and has neither. `03-profile/source.json` records the imported file's path and hash. Values in `decisions/profile.json` take precedence over imported values. The two are combined as the *effective profile*: objects merge key by key, arrays of objects merge by index (`{}` leaves an imported entry unchanged, extra entries are added), other arrays such as `keywords` combine, and any other wizard value replaces the imported one.
 
 ### Project (`04-projects/projects.json`)
 
@@ -222,7 +224,7 @@ Checks for `uv` and walks the engineer through installing it if missing. uv supp
 - A source without a connector falls back to asking for an export path.
 
 ### resume-import
-`extract_text.py` extracts text from PDF (`pypdf`), DOCX (`python-docx`), TXT or MD. JSON Resume is loaded directly. The model maps text into `03-profile/profile.json` with `x-sources`.
+Detailed in the [resume-import spec](2026-09-25-resume-import-design.md). `extract_text.py` extracts text from PDF (`pypdf`), DOCX (`python-docx`), TXT or MD into `03-profile/resume.txt`, or loads a JSON Resume directly. The model maps the text into `03-profile/profile.json`, copying every value exactly and citing each entry's lines in `x-lines`. `check_profile.py` checks that the profile says only what the resume says, then commits the stage.
 
 ### resume-analyze (checkpoint 2)
 - **Script:** `signals.py` computes per linked cluster: authored vs. reviewed counts, duration, repo and contributor counts, epic creation, first commit, and performance-review mentions.
@@ -307,7 +309,7 @@ Each gets its own spec → plan → implementation cycle, in this order. Progres
 
 1. **resume-core** and **resume-init:** schemas, the `rcore` library, `validate.py`, `stage.py`, the three checks, workspace creation, fixture workspace, skill lint, CI.
 2. **resume-render:** template, PDF/DOCX/TXT output, render tests ([spec](2026-09-25-resume-render-design.md)).
-3. **resume-import:** text extraction and profile mapping.
+3. **resume-import:** text extraction and profile mapping ([spec](2026-09-25-resume-import-design.md)).
 4. **resume-collect:** connector discovery, normalizers, git log, reviews, linking.
 5. **resume-analyze:** signals, grouping, role and scope, ranking, ID continuity.
 6. **resume-sanitize** and **resume-wizard.**

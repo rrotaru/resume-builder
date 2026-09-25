@@ -15,5 +15,10 @@ jobs:
       - uses: astral-sh/setup-uv@v6
       # Chromium for the render tests, matching the Playwright version render.py pins.
       - run: uv run --python ${{ matrix.python }} skills/resume-render/scripts/render.py --install-browser --with-deps
-      # render.py's dependencies come from its inline metadata. CI is set, so render tests never skip.
-      - run: uv run --python ${{ matrix.python }} --with pytest --with-requirements skills/resume-render/scripts/render.py pytest
+      # render.py's and extract_text.py's dependencies come from their inline metadata.
+      # CI is set, so render and import tests never skip.
+      - run: >-
+          uv run --python ${{ matrix.python }} --with pytest
+          --with-requirements skills/resume-render/scripts/render.py
+          --with-requirements skills/resume-import/scripts/extract_text.py
+          pytest
