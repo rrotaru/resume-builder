@@ -83,7 +83,7 @@ uv run scripts/decide.py --workspace WS discard N
 | Script | Exit | Meaning |
 |---|---|---|
 | `signals.py` | 0 | `04-projects.tmp/signals.json` written |
-| | 1 | Error: no or invalid `config.json`, `02-evidence/evidence.jsonl` missing, invalid or empty. Nothing written. |
+| | 1 | Error: no or invalid `config.json`, `02-evidence/evidence.jsonl` missing, invalid or empty, or a timestamp in it that is not `YYYY-MM-DDTHH:MM:SSZ`. Nothing written. |
 | `match_projects.py` | 0 | Groups checked; `groups.json` and `projects.json` written to `04-projects.tmp/`, and committed with `--commit` |
 | | 1 | Error: no `04-projects.tmp/`, a missing or invalid `signals.json` or `groups.json`, evidence changed since `signals.py`, a group problem, an invalid decision, or a failed commit. Nothing committed. |
 | | 3 | Orphaned decisions. The files are written to `04-projects.tmp/` for review, and nothing is committed. |
@@ -93,7 +93,7 @@ uv run scripts/decide.py --workspace WS discard N
 
 ## Pipeline
 
-1. `signals.py` validates `config.json` and `02-evidence/evidence.jsonl`, computes the [clusters and signals](#clusters-and-signals), runs `stages.begin(ws, "04-projects")`, writes `signals.json` and prints the clusters.
+1. `signals.py` validates `config.json` and `02-evidence/evidence.jsonl` (including that every `created_at` and `closed_at` is a UTC timestamp, as resume-collect writes them), computes the [clusters and signals](#clusters-and-signals), runs `stages.begin(ws, "04-projects")`, writes `signals.json` and prints the clusters.
 2. The model reads the signals, the evidence and the performance reviews, and writes `04-projects.tmp/groups.json` (see [Groups](#groups)).
 3. `match_projects.py` checks the groups, gives them IDs, applies `decisions/projects.json`, writes `groups.json` (now with IDs) and `projects.json` into `04-projects.tmp/`, and prints the projects for checkpoint 2.
 4. **Checkpoint 2.** The engineer reviews the projects. Each change is recorded with `decide.py`, and step 3 runs again to show the result. Orphaned decisions are re-linked or discarded.
@@ -188,14 +188,16 @@ A raw file or line that is missing or unreadable gives no people for its items, 
 A header (items, clusters, reviews), then one block per cluster of two or more items, one line per single item, and one line per performance review with its `raw_ref`:
 
 ```
-02-evidence: 4 items in 1 cluster, 1 performance review
-c1  3 items, 2025-02-10 to 2025-05-30 (109 days): epic 1, pr 1, review 1
+02-evidence: 4 items, 1 cluster (1 with two or more items), 1 performance review
+c1  3 items, 2025-02-10 to 2025-05-30 (109 days): pr 1, review 1, epic 1
     authored 1, reviewed 1, assigned 1, reported 0; +812/-140 lines in 23 files
-    repos northwind/ledger; Jira PAY; 2 contributors; epics created 0; authored first; 0 open
-    "Project Falcon: checkout latency"
-review ev_cbf558fa 2025-07-15 "2025 H1 performance review": no cluster; full text at 01-raw/reviews.jsonl:1#/items/0
+    repos: northwind/ledger; Jira: PAY; 2 contributors; epics: 1 (created 0); authored first; open items: 0; review mentions: none
+    'Project Falcon: checkout latency'
+review ev_cbf558fa 2025-07-15 '2025 H1 performance review': links to no cluster; full text at 01-raw/reviews.jsonl:1#/items/0
 wrote 04-projects.tmp/signals.json
 ```
+
+A single item prints on one line: `c7  1 item, 2025-03-04: pr, authored; 'Fix rounding in ledger export'`.
 
 ## Groups
 
@@ -244,7 +246,7 @@ An `id` the model writes is ignored and replaced. `match_projects.py` writes `gr
 
 Because both sides are the model's groupings before decisions, a run on the same evidence with the same grouping gives every group its old ID. The decisions then give the same projects. When the evidence or the grouping changes, a group keeps its ID as long as it shares at least half of its combined items with a previous group.
 
-## Decisions
+## Project decisions
 
 ### Records
 
@@ -260,7 +262,12 @@ Because both sides are the model's groupings before decisions, a run on the same
 | `set_scope` | `scope` | Sets `scope` |
 | `set_rank` | `rank` | Moves the project to that position (or last, if there are fewer projects), keeping the order of the others |
 
-Every record may carry `evidence_ids`: the project's evidence IDs when the decision was made. `decide.py` always stores them. `match_projects.py` uses them only to suggest where an orphan belongs. A record with a field its action does not use, or without a field it needs, is an error (`decisions/projects.json: /2: rename needs name`), and nothing is written.
+Every record may carry `evidence_ids`: the project's evidence IDs when the decision was made. `decide.py` always stores them. `match_projects.py` uses them only to suggest where an orphan belongs. A record with a field its action does not use, or without a field it needs, is an error, and nothing is written:
+
+```
+decisions/projects.json: decision 3 (rename pj_da2a2b53 to ''): needs name
+  fix: record project decisions only with decide.py: discard the named decision (decide.py discard N) and record it again
+```
 
 A split's new project gets ID `ids.project_id(<the group as listed in the decision>)`, made unique as in step 4 above. The decision does not change, so the ID is the same on every run, and later decisions can name it. The project is placed right after the one it came from, is named `<name> (part 2)`, `(part 3)` and so on, has an empty summary and no rank reasons, and keeps the role and scope. The skill proposes a name and summary with a `rename` decision.
 
@@ -285,7 +292,7 @@ orphaned: decision 2 (exclude pj_1d2c3b4a): pj_1d2c3b4a is not a project in this
 
 It exits 3 while any orphan remains, even with `--commit`, and commits nothing. An orphaned `exclude` could otherwise let an excluded project back onto the resume under a new ID, and an orphaned `set_role` would silently stop applying.
 
-`match_projects.py` also prints a `warning:` for each confirmed metric in `decisions/metrics.json` whose `project_id` is not a project in this run. Metrics belong to the wizard, so this never blocks.
+`match_projects.py` also prints a `warning:` for each confirmed metric in `decisions/metrics.json` whose `project_id` is not a project in this run, such as `warning: decisions/metrics.json m_1: pj_da2a2b53 was excluded by decision 2; the wizard re-links or removes this metric`. Metrics belong to the wizard, so this never blocks.
 
 ### decide.py
 
@@ -297,9 +304,9 @@ It exits 3 while any orphan remains, even with `--commit`, and commits nothing. 
 - `set-rank PJ N`: `N` is from 1 to the number of current projects.
 - `rename PJ --name NAME [--summary TEXT]`: the name is not empty.
 - `exclude`, `rename`, `set-role`, `set-scope` and `set-rank` replace any earlier decision with the same action for the same project. The new record goes last, so it applies after everything the engineer saw. `merge` and `split` are added.
-- `relink N PJ` records decision `N` again for `PJ`, with the same checks, and removes the old one. `discard N` removes decision `N`. `list` prints the decisions, numbered from 1.
+- `relink N PJ` records decision `N` again for `PJ`, with the same checks, and removes the old one. Re-linking a merge to one of the projects it names fails (a project cannot merge with itself): discard it instead. `discard N` removes decision `N`. `list` prints the decisions, numbered from 1.
 
-It validates the whole file against the schema before writing it, and replaces it atomically, so a rejected change leaves the file as it was. It never runs `match_projects.py` itself: the skill runs it next to show the result.
+It validates the whole file against the schema, and the fields of the record it adds, before writing it, and replaces the file atomically, so a rejected change leaves the file as it was. Only the added record's fields are checked, so an older record with wrong fields can still be discarded. It never runs `match_projects.py` itself: the skill runs it next to show the result.
 
 ## Projects
 
@@ -314,18 +321,22 @@ It validates the whole file against the schema before writing it, and replaces i
 `match_projects.py` prints each project, then the excluded projects, the evidence in no project, the decisions and any orphans:
 
 ```
-5 projects (4 carried from the last run, 1 new); metric prompts for the top 3
- 1. pj_da2a2b53  Project Falcon checkout latency  lead, cross-team, 2025-02 to 2025-05  metric prompt
+5 projects; metric prompts for the top 3
+IDs: 5 groups carried from the last run, 1 new
+ 1. pj_da2a2b53  Project Falcon checkout latency  [lead, cross-team, 2025-02 to 2025-05]  metric prompt
     Idempotency cache that cut checkout latency for Contoso Bank.
-    3 items: 1 authored, 1 reviewed, 1 assigned; mentioned in no review
+    3 items: 1 authored, 1 reviewed, 1 assigned, 0 reported; review mentions: none
     reasons: authored the core PR and owned the epic; customer-facing latency impact
-    decisions: set_role (1)
+    id: carried from the last run (similarity 1.00)
+    decisions: set_role
  ...
 excluded: pj_1d2c3b4a 'Hackathon badge printer' (decision 2)
 not in any project: 41 of 60 items, including 2 performance reviews
 decisions: 3 applied, 0 orphaned
 wrote 04-projects.tmp/groups.json and 04-projects.tmp/projects.json
 ```
+
+The `id:` line says whether the ID was carried from the last run (with the similarity), is new, or was `split off pj_… by decision 3`. `warning:` lines (metrics, an invalid last `groups.json`) and `note:` lines (partly grouped clusters, skipped merges and split groups) come first, and orphans last.
 
 ## SKILL.md
 
