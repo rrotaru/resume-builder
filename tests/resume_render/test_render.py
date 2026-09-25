@@ -136,6 +136,34 @@ def test_inputs_changed_during_render_writes_nothing(workspace, monkeypatch, cap
     assert not (workspace / "out").exists() and not (workspace / "out.tmp").exists()
 
 
+def test_stories_that_appear_during_render_are_not_copied(workspace, monkeypatch, capsys):
+    stories = workspace / "07-sanitized" / "stories.md"
+    stories.unlink()
+    real = render.txt.render
+
+    def render_and_add_stories(doc):
+        stories.write_text("Led Project Falcon.\n", encoding="utf-8")  # never checked by the gate
+        return real(doc)
+
+    monkeypatch.setattr(render.txt, "render", render_and_add_stories)
+    assert run(workspace, "--no-pdf") == 1
+    assert "inputs changed during render" in capsys.readouterr().err
+    assert not (workspace / "out").exists() and not (workspace / "out.tmp").exists()
+
+
+def test_stories_that_vanish_during_render_abort_it(workspace, monkeypatch, capsys):
+    real = render.txt.render
+
+    def render_and_remove_stories(doc):
+        (workspace / "07-sanitized" / "stories.md").unlink(missing_ok=True)
+        return real(doc)
+
+    monkeypatch.setattr(render.txt, "render", render_and_remove_stories)
+    assert run(workspace, "--no-pdf") == 1
+    assert "inputs changed during render" in capsys.readouterr().err
+    assert not (workspace / "out").exists() and not (workspace / "out.tmp").exists()
+
+
 def test_output_check_catches_a_term_joined_by_a_control_character(workspace, capsys):
     # The terms check does not treat U+0001 as a separator, but the render model
     # turns it into a space, so the denied term appears in the output.

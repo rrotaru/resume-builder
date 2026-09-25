@@ -78,7 +78,7 @@ Target `general` is `08-ats/general/resume.json`. Target `<slug>` is `08-ats/job
 4. For each target, build the render model and write `resume.txt`, `resume.docx` and `resume.pdf` to `out.tmp/general/` or `out.tmp/jobs/<slug>/`.
 5. Copy stories (see [Stories](#stories)).
 6. Run the output check.
-7. Hash the inputs again. If any changed, delete `out.tmp/` and exit 1 with `inputs changed during render; run render again`.
+7. Hash the inputs again, plus the optional inputs that were absent, so a file appearing mid-render counts as a change. If any changed, delete `out.tmp/` and exit 1 with `inputs changed during render; run render again`. Stories are copied only if they existed when the gate checked them.
 8. `stages.commit(ws, "out", inputs, extra={"targets": [...], "pdf": true, "pages": {"general": 1, ...}, "stories": true})`.
 
 Inputs are each target's `resume.json` (and `flags.json` for jobs), plus each of these that exists: `config.json`, `decisions/terms.json`, `decisions/profile.json`, `decisions/metrics.json`, `decisions/attestations.json`, `02-evidence/evidence.jsonl`, `03-profile/profile.json` and `07-sanitized/stories.md`. `commit` rejects inputs that do not exist, so missing optional files are left out.

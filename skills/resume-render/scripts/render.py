@@ -105,8 +105,12 @@ def _write_target(target, doc, folder: Path, chromium, paper: str) -> tuple[dict
     return texts, pages, problems
 
 
-def _copy_stories(workspace: Path, tmp: Path) -> tuple[bool, str]:
-    if (workspace / gate.STORIES).is_file():
+def _copy_stories(workspace: Path, tmp: Path, checked: bool) -> tuple[bool, str]:
+    """Copy the stories only if the gate checked them (they existed when it ran).
+
+    If they changed or vanished since, the input hash check aborts the render.
+    """
+    if checked and (workspace / gate.STORIES).is_file():
         shutil.copyfile(workspace / gate.STORIES, tmp / "stories.md")
         return True, f"stories: copied {gate.STORIES} to out/stories.md"
     reason = f"{gate.STORIES} not found; /resume-builder:sanitize writes it"
@@ -115,7 +119,7 @@ def _copy_stories(workspace: Path, tmp: Path) -> tuple[bool, str]:
     return False, f"stories: not copied, {reason}"
 
 
-def _render(workspace: Path, targets, rels: list[str], before: dict, args) -> int:
+def _render(workspace: Path, targets, rels: list[str], watched: list[str], before: dict, args) -> int:
     documents = {t.name: model.build(wsio.read_json(workspace / t.resume)) for t in targets}
     patterns, _ = terms.load_patterns(workspace)  # the gate has checked terms.json
     with contextlib.ExitStack() as stack:
@@ -138,7 +142,7 @@ def _render(workspace: Path, targets, rels: list[str], before: dict, args) -> in
                 problems += found + outcheck.check(documents[target.name], texts, patterns)
                 if count is not None:
                     pages[target.name] = count
-            copied, message = _copy_stories(workspace, tmp)
+            copied, message = _copy_stories(workspace, tmp, gate.STORIES in rels)
             messages.append(message)
             if problems:
                 for line in problems:
@@ -146,7 +150,7 @@ def _render(workspace: Path, targets, rels: list[str], before: dict, args) -> in
                     print("  fix: a rendering problem, not a data problem; report it with this output")
                 print(f"output check failed: {len(problems)} problem(s); nothing written", file=sys.stderr)
                 return CHECK_FAILED
-            if _hashes(workspace, rels) != before:
+            if _hashes(workspace, watched) != before:
                 print("inputs changed during render; run render again. Nothing written.", file=sys.stderr)
                 return CHECK_FAILED
             extra = {"targets": [t.name for t in targets], "pdf": chromium is not None,
@@ -189,7 +193,9 @@ def main(argv=None) -> int:
               "the checks still decide what may render", file=sys.stderr)
 
     rels = gate.inputs(workspace, targets)
-    before = _hashes(workspace, rels)
+    # Also watch the optional files that were absent, so one appearing mid-render aborts it too.
+    watched = list(dict.fromkeys([*rels, *gate.SHARED_INPUTS, gate.STORIES]))
+    before = _hashes(workspace, watched)
     problems = gate.run(workspace, targets)
     for notice in terms.allowed_notices(workspace):
         print(notice, file=sys.stderr)
@@ -200,7 +206,7 @@ def main(argv=None) -> int:
     if args.check:
         print("render check passed")
         return 0
-    return _render(workspace, targets, rels, before, args)
+    return _render(workspace, targets, rels, watched, before, args)
 
 
 if __name__ == "__main__":
