@@ -41,11 +41,13 @@ resume-builder/
       schemas/               # JSON Schema per stage file and decisions file
       scripts/               # validate.py, stage.py, check_sources.py, check_terms.py,
                              # check_flags.py, init_workspace.py
-        rcore/               # shared stdlib-only library (ids, schema, stages, checks)
+        rcore/               # shared library (ids, schema, stages, checks, documents); imports
+                             # only the standard library, and reads PDF/DOCX only when asked
     resume-init/
     resume-collect/
-      scripts/               # normalize_github.py, normalize_gitlab.py, normalize_jira.py,
-                             # ingest_git_log.py, ingest_reviews.py, link.py
+      references/            # sources.md: connector queries and export formats
+      scripts/               # configure.py, ingest_export.py, ingest_git_log.py, ingest_reviews.py,
+                             # normalize_github.py, normalize_gitlab.py, normalize_jira.py, link.py
     resume-import/
       scripts/               # extract_text.py, check_profile.py
     resume-analyze/
@@ -81,14 +83,14 @@ A lint script in `tests/` enforces rules 1–2.
 
 ```
 resume-workspace/
-  config.json            # sources, usernames, time range, target role, top-N settings
+  config.json            # sources, usernames, git authors, time range, target role, top-N settings
   decisions/             # engineer-owned; never overwritten by regeneration
     terms.json
     projects.json
     metrics.json
     profile.json
     attestations.json
-  01-raw/                # resume-collect: connector output as fetched, one JSONL per source
+  01-raw/                # resume-collect: pages as fetched or loaded, one JSONL per source
   02-evidence/           # resume-collect: normalized evidence.jsonl
   03-profile/            # resume-import: profile.json (JSON Resume), resume.txt, source.json
   04-projects/           # resume-analyze: projects.json, signals.json
@@ -105,6 +107,8 @@ resume-workspace/
 ```
 
 **Config paths.** A relative path in `config.json` (`resume_path`, `reviews_dir`, `local_repos`, `export_path`) is relative to the workspace folder, not to the current directory (`rcore.config.resolve_path`). Scripts that write these paths write absolute paths.
+
+**Git authors.** `config.json` `git_authors` (optional, default `[]`) lists the emails or names the engineer commits under. resume-collect keeps a local commit only when its author matches one exactly, ignoring case.
 
 **Ownership.** Each numbered folder is written by exactly one skill. `resume-wizard` writes only to `decisions/`. Checkpoints write engineer choices to `decisions/`.
 
@@ -140,7 +144,10 @@ All files are JSON or JSONL and validated against `resume-core/schemas`.
 - `kind`: `pr | mr | commit | review | issue | ticket | epic | perf_review`
 - `engineer_role`: `author | reviewer | assignee | reporter | subject`
 - `id` = `ev_` + first 8 hex chars of sha256(`source` + `:` + `native_key`), which is stable across re-collection. Collisions are detected and extended to 12 characters.
-- `links`: related evidence. Examples: a PR to a Jira key (found in branch name, title or body), a ticket to its epic.
+- `native_key`: `owner/repo#n` (GitHub pull request, review or issue), `group/project!n` (GitLab merge request or review) or `group/project#n` (GitLab issue), the Jira key, the full commit hash, or a review file's path under `reviews_dir` without its extension.
+- `links`: IDs of the evidence items this item references, sorted: Jira keys in a title, body or branch name, GitHub and GitLab references and URLs, and a ticket's parent or epic. A reference links only when its target is evidence.
+- `raw_ref`: `01-raw/<file>:<line>#/items/<index>`, the raw record it came from.
+- Items are sorted by `created_at`, then `id`. The same item fetched twice appears once (the copy with the stronger role is kept), and a squash or merge commit of the engineer's own pull request is dropped in favour of the pull request. See the [resume-collect spec](2026-09-25-resume-collect-design.md#links-and-duplicates).
 
 ### Profile (`03-profile/profile.json`)
 
@@ -219,9 +226,10 @@ The pattern: scripts handle anything that must be exact (parsing, IDs, checks); 
 Checks for `uv` and walks the engineer through installing it if missing. uv supplies Python ≥ 3.10 from each script's `requires-python`, so Python itself needs no separate check. Creates the workspace and default `config.json`. Chromium is installed lazily at first render.
 
 ### resume-collect (checkpoint 1)
-- **Model:** identifies available connectors resembling GitHub, GitLab or Jira. Confirms with the engineer: sources, time range, usernames per system, local repo paths, review export folder, existing resume path, and the data notice. Pulls PRs/MRs, reviews, issues, tickets and epics via connectors into `01-raw/<source>.jsonl` as fetched.
-- **Scripts:** `normalize_*.py` convert raw connector output *or* file exports into evidence. `ingest_git_log.py` reads local repos. `ingest_reviews.py` extracts text from review files. `link.py` connects items and removes duplicates.
-- A source without a connector falls back to asking for an export path.
+Detailed in the [resume-collect spec](2026-09-25-resume-collect-design.md).
+- **Model:** identifies available connectors resembling GitHub, GitLab or Jira. Confirms with the engineer the sources, time range, usernames per system, local repo paths and git authors, review export folder, existing resume path, and the data notice, and records each with `configure.py`. Pulls PRs/MRs, reviews, issues, tickets and epics via connectors into `01-raw/<source>.jsonl`, one page per line with the query used.
+- **Scripts:** `ingest_export.py` loads export files into `01-raw/`. `ingest_git_log.py` reads local repos, and `ingest_reviews.py` extracts text from review files. `link.py` runs the `normalize_*` logic on every raw file, removes duplicates, assigns IDs, links items and commits `01-raw` and `02-evidence`. Each `normalize_*.py` checks one source without writing.
+- A source without a connector falls back to asking for an export path. No script collects before `config.json` records that the data notice was accepted.
 
 ### resume-import
 Detailed in the [resume-import spec](2026-09-25-resume-import-design.md). `extract_text.py` extracts text from PDF (`pypdf`), DOCX (`python-docx`), TXT or MD into `03-profile/resume.txt`, or loads a JSON Resume directly. The model maps the text into `03-profile/profile.json`, copying every value exactly and citing each entry's lines in `x-lines`. `check_profile.py` checks that the profile says only what the resume says, then commits the stage.
@@ -276,9 +284,9 @@ Every checkpoint persists its choices to `decisions/`, so an interrupted run res
 | Stage fails midway | `<stage>.tmp/` discarded; previous output intact. An interrupted swap is undone by the next `begin`, `commit` or `status`. |
 | Validation fails | Names file, record ID and rule. Skills never skip or weaken a check. |
 | No connector for a source | Ask for an export path or skip. Recorded in `config.json`. |
-| Connector fails partway | Keep fetched pages in `01-raw/<source>.partial.jsonl` with a cursor. Offer retry, continue without the source, or pause. |
+| Connector fails partway | Keep fetched pages in `01-raw.tmp/<source>.partial.jsonl` with a cursor. Offer retry, continue without the source, or pause. `link.py` refuses to run while a partial file exists. |
 | Username yields no results | Show the query used, ask for an alternate username or email, never guess. |
-| Malformed export rows | Report the first 10 bad rows with line numbers, process the rest, record the skipped count in `_stage.json`. |
+| Malformed export rows | Report the first 10 bad rows per source with line numbers, process the rest, record the count as `skipped_rows` in `02-evidence/_stage.json`. |
 | Scanned PDF without text | Explain, and ask for DOCX, TXT or pasted text. No OCR in v1. |
 | Stale stages | List them and offer to rebuild in dependency order. |
 | Orphaned project decisions | Presented at checkpoint 2 to re-link or discard. |

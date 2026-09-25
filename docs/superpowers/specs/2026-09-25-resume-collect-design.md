@@ -61,6 +61,7 @@ skills/resume-collect/
       github.py  gitlab.py  jira.py  git.py  reviews.py   # one normalizer each
       refs.py              # references found in text
       merge.py             # duplicates, IDs and links
+      run.py               # raw folder against config.json, running the normalizers, reports
 skills/resume-core/scripts/rcore/
   documents.py             # moved from resume-import: document text extraction
 ```
@@ -159,11 +160,11 @@ A file that cannot be read or parsed as a whole (not UTF-8, invalid `.json`) is 
 `ingest_git_log.py` reads `local_repos` and `git_authors` (an empty `git_authors` is an error). For each repository it runs
 
 ```
-git -C REPO log --branches --remotes --tags --no-merges -F -i --author=ID ... [--since=START]
-    --shortstat --format=%x00%H%x1f%an%x1f%ae%x1f%aI%x1f%B%x00
+git -C REPO log --no-show-signature --no-color --encoding=UTF-8 --branches --remotes --tags
+    --no-merges -F -i --author=ID ... --shortstat --format=%x00%H%x1f%an%x1f%ae%x1f%aI%x1f%B%x00
 ```
 
-and keeps a commit only if its author email equals an email in `git_authors`, or its author name equals a name there, ignoring case. `--author` only narrows the search. All refs are read because a local `HEAD` may be stale, and each commit appears once by hash. Merge commits carry no authored change and are skipped. `--since` filters on the committer date, which is never earlier than the author date, so the time range is applied exactly on the author date afterwards.
+and keeps a commit only if its author email equals an email in `git_authors`, or its author name equals a name there, ignoring case. `--author` only narrows the search. All refs are read because a local `HEAD` may be stale, and each commit appears once by hash. Merge commits carry no authored change and are skipped. The time range is applied afterwards on the author date in UTC. Git's own `--since` is not used: it compares the committer date in local time, and could drop a commit the range includes. The first three options keep the output parseable whatever the engineer's git config says.
 
 Each item is `{"sha", "repo", "remote", "author_name", "author_email", "authored_at", "message", "files", "additions", "deletions"}`. `remote` is `origin`'s URL reduced to `host/path` (for example `github.com/northwind/ledger`), or null. A folder that is not a git work tree is an error, and nothing is written. If no commit matches in a repository, the report shows the identities searched and that repository's five most frequent authors, so the engineer can name another identity. Exit 3 if no repository had a match.
 
@@ -213,7 +214,9 @@ Items may be REST (search results or pull request objects), GraphQL nodes, or `g
 
 REST or `glab` JSON. `native_key` is `references.full` (`group/project!12` for a merge request, `group/project#7` for an issue), or is built from `web_url` (`/-/merge_requests/12`, `/-/issues/7`) and `iid`. Author is `author.username`. `state` is `merged`, `open` (for `opened`), `closed` or `locked`. `closed_at` is `merged_at`, then `closed_at`. Merge requests read `source_branch` for Jira keys, and `merge_commit_sha` and `squash_commit_sha` for duplicates. There are no `stats`.
 
-- **Merge request** (`kind: mr`): `author` for the author. `reviewer` when the username is in `reviewers` or the query contains `reviewer_username=<username>`. `assignee` when it is only in `assignees`.
+- **Merge request, author** (`kind: mr`, `engineer_role: author`) when the author is the username.
+- **Review** (`kind: review`, `engineer_role: reviewer`) when the username is in `reviewers` or the query contains `reviewer_username=<username>`. As on GitHub, a review has no merge commits to match.
+- **Merge request, assignee** (`kind: mr`, `engineer_role: assignee`) when the username is only in `assignees`.
 - **Issue** (`kind: issue`): `assignee`, then `author`.
 
 ### Jira
@@ -280,7 +283,7 @@ After duplicates are removed, `rcore.ids.assign_evidence_ids` runs once over eve
 
 `config.json` is not a stage input. Changing a username or the time range means fetching again, which rewrites `01-raw` and so makes `02-evidence` stale. `01-raw` records no inputs, like `03-profile`, so `stage.py status` always calls it fresh. When to collect again is resume-build's decision (roadmap piece 9).
 
-The `normalize_*.py` scripts run steps 1 and 4 for one source (default `01-raw.tmp/<source>.jsonl` when collecting, else `01-raw/`), print the same report, and write nothing. Exit 3 when no item belongs to the username. The report then lists the queries in the file and the most frequent authors seen, and the skill asks the engineer for another username or email.
+The `normalize_*.py` scripts run steps 1 and 4 for one source (default `01-raw.tmp/<source>.jsonl` when collecting, else `01-raw/`), print the same report, and write nothing. Exit 3 when nothing is kept: the file has no items, none belongs to the username, or all fall outside the time range. The report says which, lists the queries in the file and the most frequent authors seen, and the skill asks the engineer for another username or email, or checks the time range.
 
 ## SKILL.md
 
@@ -296,10 +299,11 @@ The `normalize_*.py` scripts run steps 1 and 4 for one source (default `01-raw.t
 ## Changes to resume-core, fixtures and the architecture spec
 
 1. `rcore/documents.py`: the document reader moves here from `rimport/extract.py` unchanged. `rimport/extract.py` keeps the JSON Resume format entry and re-exports the rest, so resume-import is unchanged. rcore stays importable with the standard library alone. Only reading a PDF or DOCX needs the pinned dependencies.
-2. `config.schema.json`: optional `git_authors`, an array of non-empty strings. `default_config()` includes it as `[]`. It is optional so that existing workspaces stay valid.
-3. Fixture: `01-raw/github.jsonl` (connector pages), `01-raw/jira.jsonl` and `exports/jira.csv` (a Jira CSV export and its ingested form), `01-raw/reviews.jsonl` and `reviews/2025-H1.txt`. `02-evidence/evidence.jsonl` is exactly `link.py`'s output for them: the same IDs, now in `created_at` order and with the new `raw_ref` form. The config gains `"git_authors": []`.
-4. The architecture spec: the resume-collect section points here, and the plugin layout lists the collect scripts. The Evidence contract gains the raw line format, `raw_ref`, `native_key` per source, directed links and duplicates. The workspace section lists `git_authors`.
-5. Core `SKILL.md` lists `rcore.documents` among the helpers. The test command, CI and `pytest.ini` add `skills/resume-collect/scripts`.
+2. `rcore/wsio.py`: JSONL is split on `\n` only, and `write_jsonl` escapes U+0085, U+2028 and U+2029. `str.splitlines()` breaks on those characters and `json.dumps` leaves them unescaped, so a collected string holding one (a label or a Jira status) would otherwise split an evidence line in two when read back. Titles and excerpts have their whitespace collapsed anyway.
+3. `config.schema.json`: optional `git_authors`, an array of non-empty strings. `default_config()` includes it as `[]`. It is optional so that existing workspaces stay valid.
+4. Fixture: `01-raw/github.jsonl` (connector pages), `01-raw/jira.jsonl` and `exports/jira.csv` (a Jira CSV export and its ingested form), `01-raw/reviews.jsonl` and `reviews/2025-H1.txt`. `02-evidence/evidence.jsonl` is exactly `link.py`'s output for them: the same IDs, now in `created_at` order and with the new `raw_ref` form. The config gains `"git_authors": []`.
+5. The architecture spec: the resume-collect section points here, and the plugin layout lists the collect scripts. The Evidence contract gains the raw line format, `raw_ref`, `native_key` per source, directed links and duplicates. The workspace section lists `git_authors`.
+6. Core `SKILL.md` lists `rcore.documents` among the helpers. `pytest.ini` adds `skills/resume-collect/scripts` to `pythonpath`. The test command and CI stay the same, because `ingest_reviews.py` pins the versions `extract_text.py` pins, and a test keeps them equal.
 
 ## Error handling
 
