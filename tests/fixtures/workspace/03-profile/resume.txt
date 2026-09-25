@@ -1,0 +1,30 @@
+Jordan Rivera
+Backend Engineer
+github.com/jrivera
+
+EXPERIENCE
+
+Senior Software Engineer, Northwind Payments
+Jan 2023 – Present
+
+Software Engineer, Tailspin Toys
+June 2019 – December 2022
+• Migrated the order service from PHP to Go, serving 2M requests per day
+
+PROJECTS
+
+ledger-lint
+April 2021 – present
+Open-source linter for double-entry ledger files; 300 GitHub stars
+
+EDUCATION
+
+BS, Computer Science, State University, 2019
+
+SKILLS
+
+Backend: Go, Python, Redis, PostgreSQL
+
+Links in the document:
+https://github.com/jrivera
+https://github.com/jrivera/ledger-lint

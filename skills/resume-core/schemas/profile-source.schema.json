@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Where the imported profile came from (03-profile/source.json)",
+  "description": "Written by resume-import's extract_text.py. text_sha256 is the hash of 03-profile/resume.txt, or null for a JSON Resume import, which has no resume.txt.",
+  "type": "object",
+  "required": ["path", "format", "sha256", "text_sha256"],
+  "additionalProperties": false,
+  "properties": {
+    "path": {"type": "string", "minLength": 1},
+    "format": {"enum": ["pdf", "docx", "txt", "md", "json"]},
+    "sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "text_sha256": {"type": ["string", "null"], "pattern": "^sha256:[0-9a-f]{64}$"}
+  }
+}

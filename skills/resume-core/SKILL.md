@@ -63,6 +63,8 @@ A `resume:` or `wizard:` pointer must start with `/` and point to a single strin
 
 ## The profile
 
+`03-profile/profile.json` is resume-import's faithful reading of the engineer's resume. For a PDF, DOCX, TXT or Markdown resume, `03-profile/resume.txt` holds the extracted text and each entry carries `x-lines` (`{"first": n, "last": m}`, the lines it was read from). resume-import's `check_profile.py` proves that every value appears in `resume.txt` and that entries keep its order, so an index such as `/work/1` means the same job across imports of the same file. `03-profile/source.json` records the imported file.
+
 The profile is `03-profile/profile.json` with `decisions/profile.json` laid over it (`rcore.profile.effective_profile`):
 
 - Two objects merge key by key.
@@ -112,5 +114,6 @@ from rcore import ids, stages, wsio  # noqa: E402
 
 `ids.evidence_id(source, native_key)`, `ids.assign_evidence_ids(keys)`, `ids.project_id(evidence_ids)`,
 `ids.text_sha256(text)`, `config.metric_prompt_count(n, percent, minimum, maximum)`,
+`config.resolve_path(workspace, value)` (a relative path in `config.json` is relative to the workspace),
 `profile.effective_profile(workspace)`, `profile.overlay(imported, wizard)`,
 `wsio.read_json / write_json / read_jsonl / write_jsonl / resolve_pointer`.

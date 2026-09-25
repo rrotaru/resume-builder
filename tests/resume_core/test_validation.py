@@ -267,3 +267,32 @@ def test_named_unmapped_file_has_no_schema(workspace):
     ]
     assert validation.validate_paths(workspace, ["01-raw"]) == []
     assert validation.validate_workspace(workspace) == []
+
+
+def test_profile_source_is_mapped(workspace):
+    assert validation.schema_for("03-profile/source.json") == ("profile-source", "json")
+    assert validation.schema_for("03-profile.tmp/source.json") == ("profile-source", "json")
+    path = workspace / "03-profile" / "source.json"
+    source = wsio.read_json(path)
+    source["format"] = "doc"
+    source["extra"] = 1
+    wsio.write_json(path, source)
+    assert validation.validate_paths(workspace, ["03-profile"]) == [
+        "03-profile/source.json: $.format: 'doc' is not one of ['pdf', 'docx', 'txt', 'md', 'json']",
+        "03-profile/source.json: $.extra: unexpected property",
+    ]
+
+
+def test_profile_entry_lines_are_validated(workspace):
+    path = workspace / "03-profile" / "profile.json"
+    profile = wsio.read_json(path)
+    profile["work"][0]["x-lines"] = {"first": 0, "last": "8"}
+    profile["skills"][0]["x-lines"] = {"first": 26}
+    profile["languages"] = ["Spanish"]
+    wsio.write_json(path, profile)
+    assert validation.validate_paths(workspace, ["03-profile/profile.json"]) == [
+        "03-profile/profile.json: $.work[0].x-lines.first: 0 is less than 1",
+        "03-profile/profile.json: $.work[0].x-lines.last: expected integer, got str",
+        "03-profile/profile.json: $.skills[0].x-lines: missing required property 'last'",
+        "03-profile/profile.json: $.languages[0]: expected object, got str",
+    ]

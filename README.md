@@ -11,9 +11,10 @@ Requires [uv](https://docs.astral.sh/uv/). Scripts support Python 3.10 and later
 
 ```bash
 uv run skills/resume-render/scripts/render.py --install-browser   # once: Chromium for the PDF tests
-uv run --with pytest --with-requirements skills/resume-render/scripts/render.py pytest
+uv run --with pytest --with-requirements skills/resume-render/scripts/render.py \
+  --with-requirements skills/resume-import/scripts/extract_text.py pytest
 ```
 
-The second command takes the render dependencies from `render.py`'s inline metadata. Without them (plain `uv run --with pytest pytest`) the render end-to-end tests are skipped, and tests that need Chromium skip when it is not installed. In CI (`CI` set) both fail instead.
+The second command takes the dependencies from the inline metadata of `render.py` and `extract_text.py`. Without them (plain `uv run --with pytest pytest`) the render end-to-end tests and the PDF and DOCX import tests are skipped, and tests that need Chromium skip when it is not installed. In CI (`CI` set) they fail instead.
 
-Shared workspace conventions, schemas and checks live in `skills/resume-core/` (start with its `SKILL.md`). Rendering lives in `skills/resume-render/` ([spec](docs/superpowers/specs/2026-09-25-resume-render-design.md)).
+Shared workspace conventions, schemas and checks live in `skills/resume-core/` (start with its `SKILL.md`). Importing an existing resume lives in `skills/resume-import/` ([spec](docs/superpowers/specs/2026-09-25-resume-import-design.md)), and rendering in `skills/resume-render/` ([spec](docs/superpowers/specs/2026-09-25-resume-render-design.md)).
