@@ -1,0 +1,13 @@
+{
+  "anchors": [
+    {
+      "entry": "/certificates/0",
+      "answered_for": null
+    }
+  ],
+  "skipped": [
+    {
+      "question": "profile:/basics/phone"
+    }
+  ]
+}
