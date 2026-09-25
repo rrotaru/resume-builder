@@ -83,3 +83,29 @@ def test_stage_cli_rejects_bad_extra(workspace):
         result = run("stage.py", "--workspace", workspace, "commit", "05-terms", "--extra", bad)
         assert result.returncode == 2 and "--extra" in result.stderr
     assert (workspace / "05-terms.tmp").is_dir()
+
+
+JOB = "08-ats/jobs/fintech-sre/resume.json"
+
+
+def _spellings(workspace):
+    return [f"./{JOB}", "08-ats//jobs/fintech-sre/resume.json", "08-ats/jobs/fintech-sre/./resume.json",
+            "08-ats/jobs/../jobs/fintech-sre/resume.json", str(workspace / JOB)]
+
+
+def test_check_sources_cli_checks_label_for_every_spelling(workspace):
+    resume = json.loads((workspace / JOB).read_text(encoding="utf-8"))
+    resume["basics"]["label"] = "CTO"
+    (workspace / JOB).write_text(json.dumps(resume), encoding="utf-8")
+    for rel in _spellings(workspace):
+        result = run("check_sources.py", "--workspace", workspace, rel)
+        assert result.returncode == 1 and "basics.label must match" in result.stdout, rel
+
+
+def test_validate_cli_uses_tailored_schema_for_every_spelling(workspace):
+    resume = json.loads((workspace / JOB).read_text(encoding="utf-8"))
+    resume["work"][0]["summary"] = "Led payments"
+    (workspace / JOB).write_text(json.dumps(resume), encoding="utf-8")
+    for rel in _spellings(workspace):
+        result = run("validate.py", "--workspace", workspace, rel)
+        assert result.returncode == 1 and "$.work[0].summary: unexpected property" in result.stdout, rel

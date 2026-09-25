@@ -201,3 +201,38 @@ def test_label_check_without_config_or_profile_fails(tmp_path):
     assert sources.check_resume({"basics": {"label": "CTO"}}, known, "x", tailored=True) == [
         f"x: {LABEL_ERROR}"
     ]
+
+
+def _job_spellings(workspace):
+    return [
+        f"./{JOB}",
+        "08-ats//jobs/fintech-sre/resume.json",
+        "08-ats/jobs/fintech-sre/./resume.json",
+        "08-ats/jobs/../jobs/fintech-sre/resume.json",
+        str(workspace / JOB),
+    ]
+
+
+def test_label_check_applies_to_every_spelling_of_a_tailored_path(workspace):
+    _edit_job(workspace, lambda r: r["basics"].update(label="CTO"))
+    for rel in _job_spellings(workspace):
+        assert sources.check_file(workspace, rel) == [f"{rel}: {LABEL_ERROR}"], rel
+
+
+def test_unknown_resume_paths_get_the_tailored_checks(workspace):
+    known = sources.load_known(workspace)
+    resume = {"basics": {"label": "CTO"}}
+    for rel in ["x", "08-ats/jobs/a/b/resume.json", "notes/resume.json", "/abs/03-profile/profile.json"]:
+        assert sources.check_resume(resume, known, rel) == [f"{rel}: {LABEL_ERROR}"], rel
+    for rel in ["03-profile/profile.json", "./07-sanitized/profile.json", "decisions//profile.json",
+                "07-sanitized.tmp/profile.json"]:
+        assert sources.check_resume(resume, known, rel) == [], rel
+
+
+def test_absolute_profile_path_inside_workspace_is_a_profile(workspace):
+    rel = str(workspace / "03-profile" / "profile.json")
+    assert sources.check_file(workspace, rel) == [f"{rel}: /work/1: highlights do not match x-highlights"]
+
+
+def test_path_outside_the_workspace_is_an_error(workspace):
+    assert sources.check_file(workspace, "../outside.json") == ["../outside.json: outside the workspace"]

@@ -1,6 +1,7 @@
 """Source check: every bullet cites at least one source, and every source resolves."""
 from __future__ import annotations
 
+import posixpath
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -61,7 +62,9 @@ def _allowed_labels(known: KnownSources) -> set[str]:
 
 
 def _is_tailored(rel: str) -> bool:
-    return validation.schema_for(rel) == ("tailored-resume", "json")
+    """Fail closed: every resume is tailored unless its normalized path is a profile file
+    (03-profile/profile.json, 07-sanitized/profile.json or decisions/profile.json)."""
+    return validation.schema_for(posixpath.normpath(rel)) != ("resume", "json")
 
 
 def _pointer_error(doc: dict, pointer: str, filename: str) -> str | None:
@@ -113,7 +116,9 @@ def check_resume(resume: dict, known: KnownSources, label: str,
       citing basics.x-summary-sources), must cite sources that resolve.
     - In a tailored resume, basics.label (if present) must equal config.json
       target_role or 03-profile/profile.json basics.label. tailored defaults
-      to whether label is a tailored resume path (08-ats/.../resume.json).
+      to True unless label, normalized, is a profile path (03-profile,
+      07-sanitized or decisions profile.json); any other or unknown path is
+      treated as tailored.
     """
     if tailored is None:
         tailored = _is_tailored(label)
@@ -146,17 +151,22 @@ def check_file(workspace: Path, rel: str, known: KnownSources | None = None) -> 
     """Check a bullets file (JSON array) or a tailored resume (JSON object).
 
     When known is not given it is loaded here, and any problems reading the
-    source files are reported first.
+    source files are reported first. rel is normalized (an absolute path
+    inside the workspace is made relative); a path outside the workspace is
+    an error.
     """
     errors: list[str] = []
     if known is None:
         known = load_known(workspace)
         errors += known.errors
-    data, error = wsio.load(workspace, rel)
+    normalized = validation.workspace_relative(workspace, rel)
+    if normalized is None:
+        return errors + [validation.outside_error(rel)]
+    data, error = wsio.load(workspace, normalized)
     if error:
         return errors + [error]
     if isinstance(data, list):
         return errors + check_bullets(data, known, rel)
     if isinstance(data, dict):
-        return errors + check_resume(data, known, rel)
+        return errors + check_resume(data, known, rel, tailored=_is_tailored(normalized))
     return errors + [f"{rel}: expected a bullets array or a resume object"]

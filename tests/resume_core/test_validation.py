@@ -161,3 +161,48 @@ def test_tailored_resume_accepts_every_allowed_field(workspace):
                                    "x-sources": ["ev_191cc8ce"]}]
         resume["skills"][0].update(level="Expert", **{"x-sources": ["ev_191cc8ce"]})
     assert _edit_job(workspace, change) == []
+
+
+def test_schema_for_normalizes_paths():
+    for rel in [f"./{JOB}", "08-ats//jobs/fintech-sre/resume.json",
+                "08-ats/jobs/fintech-sre/./resume.json", "08-ats/jobs/../jobs/fintech-sre/resume.json"]:
+        assert validation.schema_for(rel) == ("tailored-resume", "json"), rel
+
+
+def test_every_spelling_of_a_tailored_path_is_validated(workspace):
+    resume = wsio.read_json(workspace / JOB)
+    resume["work"][0]["summary"] = "Led payments"
+    wsio.write_json(workspace / JOB, resume)
+    for rel in [f"./{JOB}", "08-ats//jobs/fintech-sre/resume.json",
+                "08-ats/jobs/fintech-sre/./resume.json", "08-ats/jobs/../jobs/fintech-sre/resume.json",
+                str(workspace / JOB)]:
+        errors = validation.validate_paths(workspace, [rel])
+        assert len(errors) == 1 and errors[0].endswith("$.work[0].summary: unexpected property"), rel
+
+
+def test_directory_spellings_are_validated(workspace):
+    resume = wsio.read_json(workspace / JOB)
+    resume["work"][0]["summary"] = "Led payments"
+    wsio.write_json(workspace / JOB, resume)
+    for rel in ["./08-ats", "08-ats/jobs/../jobs", str(workspace / "08-ats")]:
+        assert validation.validate_paths(workspace, [rel]) == [
+            f"{JOB}: $.work[0].summary: unexpected property"
+        ], rel
+
+
+def test_paths_outside_the_workspace_are_errors(workspace, tmp_path):
+    outside = tmp_path / "outside.json"
+    outside.write_text("{}", encoding="utf-8")
+    assert validation.validate_paths(workspace, ["../outside.json", str(outside)]) == [
+        "../outside.json: outside the workspace",
+        f"{outside}: outside the workspace",
+    ]
+
+
+def test_workspace_relative():
+    assert validation.workspace_relative("/ws", "./a//b/../c.json") == "a/c.json"
+    assert validation.workspace_relative("/ws", "/ws/a/c.json") == "a/c.json"
+    assert validation.workspace_relative("/ws", "/ws") == "."
+    assert validation.workspace_relative("/ws", "/wsx/a.json") is None
+    assert validation.workspace_relative("/ws", "a/../../b.json") is None
+    assert validation.workspace_relative("/ws", "..") is None

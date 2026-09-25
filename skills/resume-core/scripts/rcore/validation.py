@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import fnmatch
 import json
+import os
+import posixpath
 from collections import Counter
 from pathlib import Path
 
@@ -47,9 +49,39 @@ def logical_path(rel: str) -> str:
     return first + sep + rest
 
 
+def workspace_relative(workspace, rel) -> str | None:
+    """Normalize a path given relative to (or inside) the workspace.
+
+    Returns the posixpath.normpath form relative to the workspace ("." for the
+    workspace itself), or None when the path lies outside the workspace. An
+    absolute path is made relative when it is inside the workspace.
+    """
+    path = posixpath.normpath(str(rel))
+    if posixpath.isabs(path):
+        for root in (os.path.abspath(workspace), os.path.realpath(workspace)):
+            root = posixpath.normpath(root)
+            if path == root:
+                return "."
+            prefix = root.rstrip("/") + "/"
+            if path.startswith(prefix):
+                return path[len(prefix):]
+        return None
+    if path == ".." or path.startswith("../"):
+        return None
+    return path
+
+
+def outside_error(rel) -> str:
+    return f"{rel}: outside the workspace"
+
+
 def schema_for(rel: str) -> tuple[str, str] | None:
-    """Return (schema name, format) for a workspace-relative path, or None."""
-    logical = logical_path(rel)
+    """Return (schema name, format) for a workspace-relative path, or None.
+
+    The path is normalized first, so "./a", "a//b" and "a/../a" spellings map
+    the same way as the plain path.
+    """
+    logical = logical_path(posixpath.normpath(rel))
     for pattern, name, fmt in FILE_SCHEMAS:
         if _matches(logical, pattern):
             return name, fmt
@@ -88,16 +120,24 @@ def validate_file(path: Path, rel: str) -> list[str]:
 
 
 def validate_paths(workspace: Path, rels: list[str]) -> list[str]:
-    """Validate files and directories given relative to the workspace."""
+    """Validate files and directories given relative to the workspace.
+
+    Paths are normalized (see workspace_relative). A path outside the
+    workspace is an error.
+    """
     workspace = Path(workspace)
     errors: list[str] = []
     for rel in rels:
-        target = workspace / rel
+        normalized = workspace_relative(workspace, rel)
+        if normalized is None:
+            errors.append(outside_error(rel))
+            continue
+        target = workspace / normalized
         if target.is_dir():
             for path in sorted(p for p in target.rglob("*") if p.is_file()):
                 errors += validate_file(path, path.relative_to(workspace).as_posix())
         elif target.is_file():
-            errors += validate_file(target, rel)
+            errors += validate_file(target, normalized if posixpath.isabs(str(rel)) else str(rel))
         else:
             errors.append(f"{rel}: not found")
     return errors
