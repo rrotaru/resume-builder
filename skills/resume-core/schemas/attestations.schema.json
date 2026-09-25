@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Accepted job-specific rewrites (decisions/attestations.json)",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "required": ["job_slug", "bullet_id", "text_sha256", "action"],
+    "additionalProperties": false,
+    "properties": {
+      "job_slug": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$"},
+      "bullet_id": {"type": "string", "pattern": "^(b_[A-Za-z0-9_-]+|summary)$"},
+      "text_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+      "action": {"enum": ["accept", "edit"]}
+    }
+  }
+}

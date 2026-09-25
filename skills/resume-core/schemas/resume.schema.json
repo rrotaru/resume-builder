@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "JSON Resume document with resume-builder extensions (x-sources, x-highlights)",
+  "type": "object",
+  "properties": {
+    "basics": {"type": "object"},
+    "work": {"type": "array", "items": {"$ref": "#/$defs/entry"}},
+    "projects": {"type": "array", "items": {"$ref": "#/$defs/entry"}},
+    "education": {"type": "array", "items": {"$ref": "#/$defs/dated"}},
+    "certificates": {"type": "array", "items": {"type": "object"}},
+    "skills": {"type": "array", "items": {"type": "object"}},
+    "x-sources": {"$ref": "#/$defs/sources"}
+  },
+  "$defs": {
+    "date": {"type": "string", "pattern": "^\\d{4}(-\\d{2}(-\\d{2})?)?$"},
+    "sourceRef": {
+      "type": "string",
+      "pattern": "^(ev_[0-9a-f]{8}([0-9a-f]{4})?|metric:m_[A-Za-z0-9_-]+|resume:/.*|wizard:/.*)$"
+    },
+    "sources": {"type": "array", "items": {"$ref": "#/$defs/sourceRef"}},
+    "dated": {
+      "type": "object",
+      "properties": {
+        "startDate": {"$ref": "#/$defs/date"},
+        "endDate": {"$ref": "#/$defs/date"},
+        "x-sources": {"$ref": "#/$defs/sources"}
+      }
+    },
+    "entry": {
+      "type": "object",
+      "properties": {
+        "startDate": {"$ref": "#/$defs/date"},
+        "endDate": {"$ref": "#/$defs/date"},
+        "highlights": {"type": "array", "items": {"type": "string"}},
+        "x-sources": {"$ref": "#/$defs/sources"},
+        "x-highlights": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["bullet_id", "text", "sources"],
+            "additionalProperties": false,
+            "properties": {
+              "bullet_id": {"type": "string", "pattern": "^b_[A-Za-z0-9_-]+$"},
+              "text": {"type": "string", "minLength": 1},
+              "sources": {"$ref": "#/$defs/sources"}
+            }
+          }
+        }
+      }
+    }
+  }
+}

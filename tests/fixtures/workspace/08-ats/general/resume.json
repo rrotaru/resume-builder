@@ -1,0 +1,84 @@
+{
+  "basics": {
+    "name": "Jordan Rivera",
+    "label": "Senior Backend Engineer",
+    "email": "jordan.rivera@example.com",
+    "location": {
+      "city": "Denver",
+      "region": "CO"
+    },
+    "x-sources": [
+      "resume:/basics",
+      "wizard:/basics/email"
+    ]
+  },
+  "work": [
+    {
+      "name": "Northwind Payments",
+      "position": "Senior Software Engineer",
+      "startDate": "2023-01",
+      "highlights": [
+        "Cut p99 checkout latency 40% for a top-10 US bank by building a Redis-backed idempotency cache in Go",
+        "Mentored two new engineers through on-call onboarding"
+      ],
+      "x-highlights": [
+        {
+          "bullet_id": "b_1",
+          "text": "Cut p99 checkout latency 40% for a top-10 US bank by building a Redis-backed idempotency cache in Go",
+          "sources": [
+            "ev_191cc8ce",
+            "ev_99a74656",
+            "metric:m_1"
+          ]
+        },
+        {
+          "bullet_id": "b_2",
+          "text": "Mentored two new engineers through on-call onboarding",
+          "sources": [
+            "ev_cbf558fa"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Tailspin Toys",
+      "position": "Software Engineer",
+      "startDate": "2019-06",
+      "endDate": "2022-12",
+      "highlights": [
+        "Migrated the order service from PHP to Go, serving 2M requests per day"
+      ],
+      "x-highlights": [
+        {
+          "bullet_id": "b_3",
+          "text": "Migrated the order service from PHP to Go, serving 2M requests per day",
+          "sources": [
+            "resume:/work/1/highlights/0"
+          ]
+        }
+      ]
+    }
+  ],
+  "education": [
+    {
+      "institution": "State University",
+      "studyType": "BS",
+      "area": "Computer Science",
+      "endDate": "2019",
+      "x-sources": [
+        "resume:/education/0"
+      ]
+    }
+  ],
+  "skills": [
+    {
+      "name": "Backend",
+      "keywords": [
+        "Go",
+        "Python",
+        "Redis",
+        "PostgreSQL"
+      ]
+    }
+  ]
+}

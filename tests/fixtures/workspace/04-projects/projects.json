@@ -1,0 +1,22 @@
+[
+  {
+    "id": "pj_da2a2b53",
+    "internal_name": "Project Falcon checkout latency",
+    "summary": "Idempotency cache that cut checkout latency for Contoso Bank.",
+    "evidence_ids": [
+      "ev_191cc8ce",
+      "ev_56410ed1",
+      "ev_99a74656"
+    ],
+    "role": "lead",
+    "scope": "cross-team",
+    "start": "2025-02",
+    "end": "2025-05",
+    "rank": 1,
+    "rank_reasons": [
+      "authored the core PR and owned the epic",
+      "customer-facing latency impact"
+    ],
+    "metric_prompt": true
+  }
+]

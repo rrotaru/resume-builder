@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "target_role": "Senior Backend Engineer",
+  "time_range": {
+    "start": "2023-01-01",
+    "end": null
+  },
+  "sources": [
+    {
+      "type": "github",
+      "mode": "connector",
+      "username": "jrivera",
+      "export_path": null
+    },
+    {
+      "type": "jira",
+      "mode": "export",
+      "username": "jordan.rivera",
+      "export_path": "exports/jira.csv"
+    }
+  ],
+  "local_repos": [],
+  "reviews_dir": "reviews",
+  "resume_path": "old-resume.pdf",
+  "metric_prompts": {
+    "percent": 0.3,
+    "min": 3,
+    "max": 8
+  },
+  "data_notice_acknowledged_at": "2026-09-24T15:00:00Z"
+}

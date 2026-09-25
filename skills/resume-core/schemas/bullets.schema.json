@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Bullets (06-bullets/bullets.json, 07-sanitized/bullets.json)",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "required": ["id", "project_id", "work_ref", "text", "form", "sources"],
+    "additionalProperties": false,
+    "properties": {
+      "id": {"type": "string", "pattern": "^b_[A-Za-z0-9_-]+$"},
+      "project_id": {"type": ["string", "null"], "pattern": "^pj_[0-9a-f]{8}$"},
+      "work_ref": {"type": ["integer", "null"], "minimum": 0},
+      "text": {"type": "string", "minLength": 1},
+      "form": {"enum": ["xyz_quantified", "xyz"]},
+      "sources": {
+        "type": "array",
+        "items": {
+          "type": "string",
+          "pattern": "^(ev_[0-9a-f]{8}([0-9a-f]{4})?|metric:m_[A-Za-z0-9_-]+|resume:/.*|wizard:/.*)$"
+        }
+      }
+    }
+  }
+}

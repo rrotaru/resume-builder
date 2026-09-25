@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Confirmed metrics (decisions/metrics.json)",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "required": ["id", "project_id", "value", "unit", "statement"],
+    "additionalProperties": false,
+    "properties": {
+      "id": {"type": "string", "pattern": "^m_[A-Za-z0-9_-]+$"},
+      "project_id": {"type": "string", "pattern": "^pj_[0-9a-f]{8}$"},
+      "value": {"type": "number"},
+      "unit": {"type": "string"},
+      "statement": {"type": "string", "minLength": 1}
+    }
+  }
+}

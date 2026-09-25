@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Confidentiality decisions (decisions/terms.json)",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "required": ["term", "replacement", "kind"],
+    "additionalProperties": false,
+    "properties": {
+      "term": {"type": "string", "minLength": 2},
+      "replacement": {"type": ["string", "null"]},
+      "kind": {"enum": ["codename", "customer", "product", "url", "financial", "other"]}
+    }
+  }
+}

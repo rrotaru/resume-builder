@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Workspace config (config.json)",
+  "type": "object",
+  "required": ["schema_version", "target_role", "time_range", "sources", "local_repos",
+               "reviews_dir", "resume_path", "metric_prompts", "data_notice_acknowledged_at"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {"const": 1},
+    "target_role": {"type": "string"},
+    "time_range": {
+      "type": "object",
+      "required": ["start", "end"],
+      "additionalProperties": false,
+      "properties": {
+        "start": {"$ref": "#/$defs/dateOrNull"},
+        "end": {"$ref": "#/$defs/dateOrNull"}
+      }
+    },
+    "sources": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["type", "mode"],
+        "additionalProperties": false,
+        "properties": {
+          "type": {"enum": ["github", "gitlab", "jira"]},
+          "mode": {"enum": ["connector", "export", "skip"]},
+          "username": {"type": ["string", "null"]},
+          "export_path": {"type": ["string", "null"]}
+        }
+      }
+    },
+    "local_repos": {"type": "array", "items": {"type": "string", "minLength": 1}},
+    "reviews_dir": {"type": ["string", "null"]},
+    "resume_path": {"type": ["string", "null"]},
+    "metric_prompts": {
+      "type": "object",
+      "required": ["percent", "min", "max"],
+      "additionalProperties": false,
+      "properties": {
+        "percent": {"type": "number", "minimum": 0, "maximum": 1},
+        "min": {"type": "integer", "minimum": 0},
+        "max": {"type": "integer", "minimum": 0}
+      }
+    },
+    "data_notice_acknowledged_at": {"type": ["string", "null"]}
+  },
+  "$defs": {
+    "dateOrNull": {"type": ["string", "null"], "pattern": "^\\d{4}-\\d{2}-\\d{2}$"}
+  }
+}
