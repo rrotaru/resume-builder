@@ -78,6 +78,8 @@ def validate_file(path: Path, rel: str) -> list[str]:
         else:
             data = wsio.read_json(path)
             errors = [f"{rel}: {e}" for e in schema.validate(data, spec)]
+    except UnicodeDecodeError:
+        return [f"{rel}: not UTF-8 text"]
     except (ValueError, json.JSONDecodeError) as exc:
         return [f"{rel}: {exc}"]
     if isinstance(data, list):

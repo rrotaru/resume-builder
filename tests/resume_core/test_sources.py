@@ -61,3 +61,50 @@ def test_imported_highlights_without_x_highlights_fail(workspace):
     assert sources.check_file(workspace, "03-profile/profile.json") == [
         "03-profile/profile.json: /work/1: highlights do not match x-highlights"
     ]
+
+
+def test_pointer_sources_must_name_a_single_value(workspace):
+    known = sources.load_known(workspace)
+    profile_err = "must point to a single value in 03-profile/profile.json"
+    wizard_err = "must point to a single value in decisions/profile.json"
+    assert sources.source_error("resume:", known) == profile_err
+    assert sources.source_error("resume:/work", known) == profile_err
+    assert sources.source_error("resume:/work/1", known) == profile_err
+    assert sources.source_error("resume:/work/1/highlights", known) == profile_err
+    assert sources.source_error("wizard:", known) == wizard_err
+    assert sources.source_error("wizard:/basics", known) == wizard_err
+    assert sources.source_error("resume:work/1/highlights/0", known) == (
+        "does not resolve in 03-profile/profile.json"
+    )
+
+
+def test_pointer_sources_accept_strings_and_numbers_only():
+    known = sources.KnownSources(profile={"s": "x", "n": 3, "f": 1.5, "b": True, "z": None})
+    for ok in ["resume:/s", "resume:/n", "resume:/f"]:
+        assert sources.source_error(ok, known) is None
+    for bad in ["resume:/b", "resume:/z"]:
+        assert sources.source_error(bad, known) == "must point to a single value in 03-profile/profile.json"
+
+
+def test_container_pointer_in_bullet_fails(workspace):
+    path = workspace / "06-bullets" / "bullets.json"
+    bullets = wsio.read_json(path)
+    bullets[2]["sources"] = ["resume:/work"]
+    wsio.write_json(path, bullets)
+    assert sources.check_file(workspace, "06-bullets/bullets.json") == [
+        "06-bullets/bullets.json: bullet b_3: resume:/work: "
+        "must point to a single value in 03-profile/profile.json"
+    ]
+
+
+def test_unreadable_files_are_reported_not_raised(workspace):
+    assert sources.check_file(workspace, "06-bullets/nope.json") == ["06-bullets/nope.json: not found"]
+    (workspace / "06-bullets" / "bullets.json").write_text("[{", encoding="utf-8")
+    [error] = sources.check_file(workspace, "06-bullets/bullets.json")
+    assert error.startswith("06-bullets/bullets.json: invalid JSON")
+
+
+def test_unreadable_known_source_file_is_reported(workspace):
+    (workspace / "decisions" / "metrics.json").write_bytes(b"\xff\xfe")
+    errors = sources.check_file(workspace, "07-sanitized/bullets.json")
+    assert errors[0] == "decisions/metrics.json: not UTF-8 text"

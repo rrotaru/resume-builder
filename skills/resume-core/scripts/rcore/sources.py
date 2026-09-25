@@ -13,32 +13,49 @@ class KnownSources:
     metric_ids: set[str] = field(default_factory=set)
     profile: dict = field(default_factory=dict)
     wizard: dict = field(default_factory=dict)
+    errors: list[str] = field(default_factory=list)  # files present but unreadable
+
+
+def _ids(records) -> set[str]:
+    if not isinstance(records, list):
+        return set()
+    return {r["id"] for r in records if isinstance(r, dict) and isinstance(r.get("id"), str)}
 
 
 def load_known(workspace: Path) -> KnownSources:
-    """Collect everything a bullet may cite. Missing files contribute nothing."""
+    """Collect everything a bullet may cite.
+
+    Missing files contribute nothing. A file that exists but cannot be read
+    contributes nothing and adds a line to known.errors.
+    """
     workspace = Path(workspace)
     known = KnownSources()
-    evidence = workspace / "02-evidence" / "evidence.jsonl"
-    if evidence.is_file():
-        known.evidence_ids = {r["id"] for r in wsio.read_jsonl(evidence)}
-    metrics = workspace / "decisions" / "metrics.json"
-    if metrics.is_file():
-        known.metric_ids = {m["id"] for m in wsio.read_json(metrics)}
-    profile = workspace / "03-profile" / "profile.json"
-    if profile.is_file():
-        known.profile = wsio.read_json(profile)
-    wizard = workspace / "decisions" / "profile.json"
-    if wizard.is_file():
-        known.wizard = wsio.read_json(wizard)
+
+    def read(rel: str, fmt: str = "json"):
+        if not (workspace / rel).is_file():
+            return None
+        data, error = wsio.load(workspace, rel, fmt)
+        if error:
+            known.errors.append(error)
+        return data
+
+    known.evidence_ids = _ids(read("02-evidence/evidence.jsonl", "jsonl"))
+    known.metric_ids = _ids(read("decisions/metrics.json"))
+    profile = read("03-profile/profile.json")
+    known.profile = profile if isinstance(profile, dict) else {}
+    wizard = read("decisions/profile.json")
+    known.wizard = wizard if isinstance(wizard, dict) else {}
     return known
 
 
 def _pointer_error(doc: dict, pointer: str, filename: str) -> str | None:
+    """A pointer source must resolve to a single string or number."""
     try:
-        wsio.resolve_pointer(doc, pointer)
+        value = wsio.resolve_pointer(doc, pointer)
     except KeyError:
         return f"does not resolve in {filename}"
+    if not pointer.startswith("/") or isinstance(value, bool) or not isinstance(value, (str, int, float)):
+        return f"must point to a single value in {filename}"
     return None
 
 
@@ -85,9 +102,20 @@ def check_resume(resume: dict, known: KnownSources, label: str) -> list[str]:
 
 
 def check_file(workspace: Path, rel: str, known: KnownSources | None = None) -> list[str]:
-    """Check a bullets file (JSON array) or a tailored resume (JSON object)."""
-    known = load_known(workspace) if known is None else known
-    data = wsio.read_json(Path(workspace) / rel)
+    """Check a bullets file (JSON array) or a tailored resume (JSON object).
+
+    When known is not given it is loaded here, and any problems reading the
+    source files are reported first.
+    """
+    errors: list[str] = []
+    if known is None:
+        known = load_known(workspace)
+        errors += known.errors
+    data, error = wsio.load(workspace, rel)
+    if error:
+        return errors + [error]
     if isinstance(data, list):
-        return check_bullets(data, known, rel)
-    return check_resume(data, known, rel)
+        return errors + check_bullets(data, known, rel)
+    if isinstance(data, dict):
+        return errors + check_resume(data, known, rel)
+    return errors + [f"{rel}: expected a bullets array or a resume object"]

@@ -3,6 +3,8 @@
 Supports the subset used by resume-core schemas: type, const, enum, anyOf,
 required, properties, additionalProperties, items, minItems, pattern,
 minLength, minimum, maximum and local references ("#/$defs/<name>").
+load_schema rejects any other keyword, so a schema can never silently rely
+on a rule this validator does not enforce.
 """
 from __future__ import annotations
 
@@ -21,9 +23,41 @@ _PY_TYPES = {
 }
 
 
+SUPPORTED_KEYWORDS = frozenset({
+    "$schema", "title", "description", "$defs", "$ref", "type", "const", "enum", "anyOf",
+    "required", "properties", "additionalProperties", "items", "minItems", "pattern",
+    "minLength", "minimum", "maximum",
+})
+
+
+def check_schema(node, name: str, path: str = "#") -> None:
+    """Raise ValueError if a schema uses a keyword outside SUPPORTED_KEYWORDS.
+
+    Walks only schema positions: the schema itself, each value under
+    properties and $defs, items, a schema-valued additionalProperties and
+    each anyOf branch. Property names and const/enum values are data.
+    """
+    if not isinstance(node, dict):
+        raise ValueError(f"{name}: expected a schema object at {path}")
+    for key in node:
+        if key not in SUPPORTED_KEYWORDS:
+            raise ValueError(f"{name}: unsupported keyword '{key}' at {path}")
+    for key in ("properties", "$defs"):
+        for child, sub in node.get(key, {}).items():
+            check_schema(sub, name, f"{path}/{key}/{child}")
+    if "items" in node:
+        check_schema(node["items"], name, f"{path}/items")
+    if isinstance(node.get("additionalProperties"), dict):
+        check_schema(node["additionalProperties"], name, f"{path}/additionalProperties")
+    for i, sub in enumerate(node.get("anyOf", [])):
+        check_schema(sub, name, f"{path}/anyOf/{i}")
+
+
 def load_schema(name: str) -> dict:
-    """Load schemas/<name>.schema.json."""
-    return json.loads((SCHEMA_DIR / f"{name}.schema.json").read_text(encoding="utf-8"))
+    """Load schemas/<name>.schema.json, rejecting unsupported keywords."""
+    spec = json.loads((SCHEMA_DIR / f"{name}.schema.json").read_text(encoding="utf-8"))
+    check_schema(spec, name)
+    return spec
 
 
 def _is_type(value, type_name: str) -> bool:
@@ -32,6 +66,28 @@ def _is_type(value, type_name: str) -> bool:
     if type_name == "number":
         return isinstance(value, (int, float)) and not isinstance(value, bool)
     return isinstance(value, _PY_TYPES[type_name])
+
+
+def _json_equal(a, b) -> bool:
+    """JSON equality: booleans never equal numbers; 1 equals 1.0."""
+    if isinstance(a, bool) or isinstance(b, bool):
+        return type(a) is type(b) and a == b
+    if isinstance(a, (int, float)) and isinstance(b, (int, float)):
+        return a == b
+    if isinstance(a, list) and isinstance(b, list):
+        return len(a) == len(b) and all(_json_equal(x, y) for x, y in zip(a, b))
+    if isinstance(a, dict) and isinstance(b, dict):
+        return a.keys() == b.keys() and all(_json_equal(a[k], b[k]) for k in a)
+    return type(a) is type(b) and a == b
+
+
+def _search(pattern: str, text: str) -> bool:
+    """re.search, except a trailing unescaped $ means end of string (no trailing newline)."""
+    if pattern.endswith("$"):
+        backslashes = len(pattern[:-1]) - len(pattern[:-1].rstrip("\\"))
+        if backslashes % 2 == 0:
+            pattern = pattern[:-1] + r"\Z"
+    return re.search(pattern, text) is not None
 
 
 def _resolve_ref(ref: str, root: dict) -> dict:
@@ -53,9 +109,9 @@ def validate(instance, schema: dict, root: dict | None = None, path: str = "$") 
             return [f"{path}: expected {' or '.join(types)}, got {type(instance).__name__}"]
 
     errors: list[str] = []
-    if "const" in schema and instance != schema["const"]:
+    if "const" in schema and not _json_equal(instance, schema["const"]):
         errors.append(f"{path}: must equal {schema['const']!r}")
-    if "enum" in schema and instance not in schema["enum"]:
+    if "enum" in schema and not any(_json_equal(instance, v) for v in schema["enum"]):
         errors.append(f"{path}: {instance!r} is not one of {schema['enum']}")
     if "anyOf" in schema and all(validate(instance, s, root, path) for s in schema["anyOf"]):
         errors.append(f"{path}: does not match any allowed form")
@@ -63,7 +119,7 @@ def validate(instance, schema: dict, root: dict | None = None, path: str = "$") 
     if isinstance(instance, str):
         if len(instance) < schema.get("minLength", 0):
             errors.append(f"{path}: shorter than {schema['minLength']} characters")
-        if "pattern" in schema and not re.search(schema["pattern"], instance):
+        if "pattern" in schema and not _search(schema["pattern"], instance):
             errors.append(f"{path}: {instance!r} does not match {schema['pattern']}")
 
     if _is_type(instance, "number"):

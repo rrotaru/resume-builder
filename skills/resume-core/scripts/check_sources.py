@@ -20,7 +20,9 @@ def main() -> int:
     parser.add_argument("files", nargs="+")
     args = parser.parse_args()
     known = sources.load_known(args.workspace)
-    errors = [e for rel in args.files for e in sources.check_file(args.workspace, rel, known)]
+    errors = known.errors + [
+        e for rel in args.files for e in sources.check_file(args.workspace, rel, known)
+    ]
     for error in errors:
         print(error)
     if errors:

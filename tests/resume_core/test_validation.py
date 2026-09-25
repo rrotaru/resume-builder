@@ -65,3 +65,10 @@ def test_workspace_validation_skips_tmp_and_old(workspace):
 
 def test_missing_path_is_an_error(workspace):
     assert validation.validate_paths(workspace, ["nope.json"]) == ["nope.json: not found"]
+
+
+def test_non_utf8_file_is_reported(workspace):
+    (workspace / "04-projects" / "projects.json").write_bytes(b"\xff\xfe[]")
+    assert validation.validate_paths(workspace, ["04-projects/projects.json"]) == [
+        "04-projects/projects.json: not UTF-8 text"
+    ]

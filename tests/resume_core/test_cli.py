@@ -57,3 +57,9 @@ def test_check_terms_cli_fails_closed_without_terms_file(workspace):
     result = run("check_terms.py", "--workspace", workspace, "07-sanitized/bullets.json")
     assert result.returncode == 1
     assert result.stdout.splitlines() == ["decisions/terms.json: not found; run init_workspace.py"]
+
+
+def test_check_sources_cli_reports_missing_file(workspace):
+    result = run("check_sources.py", "--workspace", workspace, "06-bullets/nope.json")
+    assert result.returncode == 1
+    assert result.stdout.splitlines() == ["06-bullets/nope.json: not found"]

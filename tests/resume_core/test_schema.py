@@ -1,4 +1,7 @@
-from rcore.schema import validate
+import pytest
+
+from rcore import schema as schema_module
+from rcore.schema import check_schema, validate
 
 OBJ = {
     "type": "object",
@@ -51,3 +54,44 @@ def test_any_of():
 def test_additional_properties_schema():
     schema = {"type": "object", "additionalProperties": {"type": "string"}}
     assert validate({"a": "x", "b": 1}, schema) == ["$.b: expected string, got int"]
+
+
+def test_pattern_trailing_dollar_rejects_trailing_newline():
+    schema = {"type": "string", "pattern": "^b_[0-9]+$"}
+    assert validate("b_1", schema) == []
+    assert validate("b_1\n", schema) != []
+    assert validate("a$", {"pattern": "a\\$"}) == []
+
+
+def test_const_and_enum_compare_types_strictly():
+    assert validate(True, {"const": 1}) != []
+    assert validate(True, {"enum": [1]}) != []
+    assert validate(1, {"const": True}) != []
+    assert validate(0, {"enum": [False]}) != []
+    assert validate(1, {"const": 1}) == []
+    assert validate(1.0, {"const": 1}) == []
+    assert validate(True, {"enum": [True]}) == []
+    assert validate([1], {"const": [True]}) != []
+    assert validate({"a": 1}, {"const": {"a": 1}}) == []
+
+
+def test_unsupported_keyword_is_rejected():
+    with pytest.raises(ValueError, match=r"x: unsupported keyword 'maxLength' at #"):
+        check_schema({"maxLength": 3}, "x")
+    with pytest.raises(ValueError, match=r"unsupported keyword 'format' at #/properties/a/items"):
+        check_schema({"properties": {"a": {"items": {"format": "date"}}}}, "x")
+    with pytest.raises(ValueError, match=r"unsupported keyword 'oneOf' at #/\$defs/d/anyOf/0"):
+        check_schema({"$defs": {"d": {"anyOf": [{"oneOf": []}]}}}, "x")
+
+
+def test_property_names_are_not_keywords():
+    check_schema({"properties": {"maxLength": {"type": "string"}, "format": {}},
+                  "$defs": {"oneOf": {"type": "string"}},
+                  "additionalProperties": {"enum": [{"format": 1}]}}, "x")
+
+
+def test_load_schema_rejects_unsupported_keywords(tmp_path, monkeypatch):
+    (tmp_path / "bad.schema.json").write_text('{"maxLength": 3}', encoding="utf-8")
+    monkeypatch.setattr(schema_module, "SCHEMA_DIR", tmp_path)
+    with pytest.raises(ValueError, match="bad: unsupported keyword 'maxLength' at #"):
+        schema_module.load_schema("bad")
