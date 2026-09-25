@@ -6,12 +6,14 @@ so a bullet rewritten after the diff is caught even if it was never flagged.
 """
 from __future__ import annotations
 
+import re
 from collections import Counter
 from pathlib import Path
 
 from . import ids, schema, wsio
 
 ATTESTATIONS = "decisions/attestations.json"
+_SLUG = re.compile(r"[a-z0-9][a-z0-9-]*")
 
 
 def _load(workspace: Path, rel: str, schema_name: str) -> tuple[object, list[str]]:
@@ -23,6 +25,9 @@ def _load(workspace: Path, rel: str, schema_name: str) -> tuple[object, list[str
 
 
 def check_job(workspace: Path, job: str) -> list[str]:
+    """Check 08-ats/jobs/<job>. job must be one plain path segment (^[a-z0-9][a-z0-9-]*$)."""
+    if not _SLUG.fullmatch(job):
+        return [f"{job}: job slug must be a single plain name"]
     workspace = Path(workspace)
     label = f"08-ats/jobs/{job}"
     resume_rel, flags_rel = f"{label}/resume.json", f"{label}/flags.json"

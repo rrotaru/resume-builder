@@ -109,3 +109,18 @@ def test_validate_cli_uses_tailored_schema_for_every_spelling(workspace):
     for rel in _spellings(workspace):
         result = run("validate.py", "--workspace", workspace, rel)
         assert result.returncode == 1 and "$.work[0].summary: unexpected property" in result.stdout, rel
+
+
+def test_check_terms_cli_prints_notices_to_stderr(workspace):
+    path = workspace / "decisions" / "terms.json"
+    entries = json.loads(path.read_text(encoding="utf-8"))
+    entries.append({"term": "ContosoBank", "replacement": None, "kind": "other"})
+    path.write_text(json.dumps(entries), encoding="utf-8")
+    ok = run("check_terms.py", "--workspace", workspace, "08-ats/general/resume.json")
+    assert ok.returncode == 0 and "notice" not in ok.stdout
+    assert ok.stderr.splitlines() == [
+        "notice: allowed term 'ContosoBank' looks like denied term 'Contoso Bank'; "
+        "confirm at checkpoint 4 that it is a different word"
+    ]
+    bad = run("check_terms.py", "--workspace", workspace, "06-bullets/bullets.json")
+    assert bad.returncode == 1 and "looks like denied term" in bad.stderr

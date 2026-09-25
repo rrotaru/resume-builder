@@ -239,3 +239,57 @@ def test_allowed_term_cannot_contain_a_denied_term(workspace, denied, allowed):
 def test_allowed_terms_that_do_not_contain_a_denied_term_are_accepted(workspace, denied, allowed):
     _write_terms(workspace, [_deny(denied), _allow(allowed)])
     assert terms.check_file(workspace, "07-sanitized/bullets.json") == []
+
+
+def _notice(allowed, denied):
+    return (f"notice: allowed term '{allowed}' looks like denied term '{denied}'; "
+            "confirm at checkpoint 4 that it is a different word")
+
+
+@pytest.mark.parametrize("denied, allowed", [
+    ("Contoso Bank", "ContosoBank"),
+    ("Check Point", "checkpoint"),
+    ("Contoso Bank", "contoso-banks"),
+    ("Air Flow", "Airflow"),
+])
+def test_allowed_term_that_looks_like_a_denied_term_gives_a_notice(workspace, denied, allowed):
+    entries = [_deny(denied), _allow(allowed)]
+    assert terms.allowed_notices(entries) == [_notice(allowed, denied)]
+    _write_terms(workspace, entries)
+    assert terms.allowed_notices(workspace / "decisions" / "terms.json") == [_notice(allowed, denied)]
+    assert terms.allowed_notices(workspace) == [_notice(allowed, denied)]
+    assert terms.check_file(workspace, "07-sanitized/bullets.json") == []
+
+
+def test_no_notice_for_unrelated_or_conflicting_allowed_terms(workspace):
+    assert terms.allowed_notices([_deny("Contoso Bank"), _allow("Go"), _allow("Contoso")]) == []
+    # Conflicts are reported as errors by allowed_conflicts, not as notices.
+    assert terms.allowed_notices([_deny("Contoso"), _allow("Contoso Bank")]) == []
+    assert terms.allowed_notices(workspace) == []
+
+
+def test_notices_are_empty_when_terms_json_is_unusable(workspace):
+    (workspace / "decisions" / "terms.json").write_text("[{", encoding="utf-8")
+    assert terms.allowed_notices(workspace) == []
+
+
+def test_check_file_chooses_format_ignoring_suffix_case(workspace):
+    (workspace / "x.JSON").write_text('{"a": "Contos\\u006f Bank"}', encoding="utf-8")
+    assert terms.check_file(workspace, "x.JSON") == [
+        "x.JSON:/a: contains denylisted term 'Contoso Bank'"
+    ]
+
+
+@pytest.mark.parametrize("text", [
+    "Conto\u2065so Bank",   # unassigned default-ignorable
+    "Conto\ufff0so Bank",   # U+FFF0..FFF8 reserved default-ignorables
+    "Conto\ufff8so Bank",
+])
+def test_more_default_ignorables_are_ignored(text):
+    assert terms.scan_json({"a": text}, PATTERNS, "x") == ["x:/a: contains denylisted term 'Contoso Bank'"]
+
+
+def test_bullet_operator_is_a_separator():
+    assert terms.scan_json({"a": "Led Project\u2219Falcon"}, PATTERNS, "x") == [
+        "x:/a: contains denylisted term 'Project Falcon'"
+    ]

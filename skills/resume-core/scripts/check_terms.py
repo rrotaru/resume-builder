@@ -20,6 +20,9 @@ def main() -> int:
     parser.add_argument("files", nargs="+")
     args = parser.parse_args()
     patterns, errors = terms.load_patterns(args.workspace)
+    # Notices never change the exit code; skills show them at checkpoint 4.
+    for notice in terms.allowed_notices(args.workspace):
+        print(notice, file=sys.stderr)
     if not errors:
         errors = [e for rel in args.files for e in terms.check_file(args.workspace, rel, patterns)]
     for error in errors:

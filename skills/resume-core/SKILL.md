@@ -79,6 +79,8 @@ To resolve a false positive, either add the flagged word to `decisions/terms.jso
 
 Allowed terms match literally, so plural forms are not covered: add each one as its own allowed term (for example `checkpoints` beside `checkpoint`). An allowed term may not equal or contain a denied term as a whole word (with `Contoso` denied, `Contoso Bank` cannot be allowed); `decisions/terms.json` is then invalid and the terms check fails.
 
+An allowed term that only looks like a denied term, such as `ContosoBank` or `contoso-banks` beside denied `Contoso Bank`, or `checkpoint` beside denied `Check Point`, is valid, but `check_terms.py` prints a notice for it on stderr (`notice: allowed term '<a>' looks like denied term '<d>'; ...`). Notices never change the exit code. Skills must show every notice to the engineer at checkpoint 4 and have them confirm that the allowed term is a different word; `terms.allowed_notices()` returns the same list.
+
 ## Python helpers for other skills' scripts
 
 Scripts in other skills may import the shared library:

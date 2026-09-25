@@ -1,3 +1,5 @@
+import pytest
+
 from rcore import flags, ids, wsio
 
 JOB = "fintech-sre"
@@ -120,3 +122,9 @@ def test_unreadable_files_are_reported_not_raised(workspace):
     (workspace / FLAGS).write_text("{}", encoding="utf-8")
     errors = flags.check_job(workspace, JOB)
     assert any(e.startswith("decisions/attestations.json: invalid JSON") for e in errors)
+
+
+@pytest.mark.parametrize("slug", ["./fintech-sre", "fintech-sre/", "../jobs/fintech-sre",
+                                  "Fintech-SRE", "-x", "", "a/b"])
+def test_job_slug_must_be_a_single_plain_name(workspace, slug):
+    assert flags.check_job(workspace, slug) == [f"{slug}: job slug must be a single plain name"]

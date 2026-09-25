@@ -6,7 +6,8 @@ characters removed, casefolded). Invisible characters are format characters
 selectors, Hangul fillers, Mongolian free variation selectors, tag characters
 and the like) and the Braille blank U+2800. A term's words may be separated by
 any run of separator characters (whitespace, underscore, dashes, minus, full
-stop, slash, backslash, middle dot, bullets and other slash/dot lookalikes),
+stop, slash, backslash, middle dot, bullets, bullet operator and other
+slash/dot lookalikes),
 or by nothing. A trailing "s" or "es" still matches for terms of 5 or more
 characters. A match must not have a letter, digit or underscore on either side.
 
@@ -14,6 +15,9 @@ Allowed terms (replacement null) are matched literally: normalized, whole-word,
 with no separator flexibility and no plural. A denied match lying entirely
 inside an allowed match is not reported. An allowed term may not equal or
 contain a denied term (see allowed_conflicts); terms.json is then invalid.
+An allowed term that merely looks like a denied term (for example "ContosoBank"
+beside denied "Contoso Bank") is valid but gets a notice (see allowed_notices)
+that the engineer must confirm at checkpoint 4.
 """
 from __future__ import annotations
 
@@ -35,10 +39,12 @@ _IGNORABLE_RANGES = [
     (0x115F, 0x1160),    # Hangul choseong and jungseong fillers
     (0x17B4, 0x17B5),    # Khmer inherent vowels
     (0x180B, 0x180F),    # Mongolian free variation selectors and vowel separator
+    (0x2065, 0x2065),    # reserved default-ignorable
     (0x2800, 0x2800),    # Braille pattern blank
     (0x3164, 0x3164),    # Hangul filler
     (0xFE00, 0xFE0F),    # variation selectors 1-16
     (0xFFA0, 0xFFA0),    # half-width Hangul filler
+    (0xFFF0, 0xFFF8),    # reserved default-ignorables
     (0x1BCA0, 0x1BCA3),  # shorthand format controls
     (0x1D173, 0x1D17A),  # musical symbol format controls
     (0xE0000, 0xE0FFF),  # tags and variation selectors 17-256
@@ -46,12 +52,12 @@ _IGNORABLE_RANGES = [
 _IGNORABLE = frozenset(chr(c) for first, last in _IGNORABLE_RANGES for c in range(first, last + 1))
 # Whitespace, underscore, every dash (category Pd), minus sign, full stop, slash,
 # backslash, middle dot, and lookalikes: division slash, fraction slash, hyphenation
-# point, hyphen bullet, modifier minus, katakana middle dot, bullet.
+# point, hyphen bullet, modifier minus, katakana middle dot, bullet, bullet operator.
 _DASHES = "".join(
     chr(c) for c in range(sys.maxunicode + 1) if unicodedata.category(chr(c)) == "Pd"
 )
 _SEPARATOR = "[\\s" + re.escape(
-    "_" + _DASHES + "\u2212./\\\u00b7\u2215\u2044\u2027\u2043\u02d7\u30fb\u2022"
+    "_" + _DASHES + "\u2212./\\\u00b7\u2215\u2044\u2027\u2043\u02d7\u30fb\u2022\u2219"
 ) + "]"
 _PLURAL_MIN_LENGTH = 5
 
@@ -97,6 +103,15 @@ def _words(term: str) -> str:
     return " ".join(w for w in re.split(_SEPARATOR + "+", normalize(term)) if w)
 
 
+def _conflicts(allowed: str, denied: str) -> bool:
+    """True when the allowed term equals or contains the denied term as a whole word."""
+    d_words = _words(denied)
+    if normalize(allowed) == normalize(denied):
+        return True
+    return bool(d_words) and re.search(
+        r"(?<!\w)" + re.escape(d_words) + r"(?!\w)", _words(allowed)) is not None
+
+
 def allowed_conflicts(denied: list[str], allowed: list[str]) -> list[str]:
     """Errors for allowed terms that equal or contain a denied term.
 
@@ -104,16 +119,45 @@ def allowed_conflicts(denied: list[str], allowed: list[str]) -> list[str]:
     the denied term must appear in the allowed term as a whole word. An
     allowed term like that would let the denied name through.
     """
-    errors = []
+    return [
+        f"{TERMS_FILE}: allowed term '{a}' contains denied term '{d}'; remove it or reword"
+        for a in allowed for d in denied if _conflicts(a, d)
+    ]
+
+
+def allowed_notices(terms_path_or_entries) -> list[str]:
+    """Notices for allowed terms that look like a denied term but do not conflict.
+
+    Takes a workspace, a path to terms.json, or a list of terms.json entries.
+    A notice is given when a denied term's matcher, with separator flexibility
+    but no plural suffix and no word boundaries, matches inside the normalized
+    allowed term ("ContosoBank" beside denied "Contoso Bank"). Pairs that
+    allowed_conflicts reports are left out. Returns [] when the terms cannot
+    be read; the terms check reports that itself.
+    """
+    entries = terms_path_or_entries
+    if isinstance(entries, (str, Path)):
+        path = Path(entries)
+        if path.is_dir():
+            path = path / TERMS_FILE
+        try:
+            entries = wsio.read_json(path)
+        except (OSError, ValueError):
+            return []
+    if not isinstance(entries, list):
+        return []
+    entries = [e for e in entries
+               if isinstance(e, dict) and isinstance(e.get("term"), str) and "replacement" in e]
+    denied = [e["term"] for e in entries if e["replacement"] is not None]
+    allowed = [e["term"] for e in entries if e["replacement"] is None]
+    notices = []
     for a in allowed:
-        a_words = _words(a)
+        normalized = normalize(a)
         for d in denied:
-            d_words = _words(d)
-            same = normalize(a) == normalize(d)
-            if same or (d_words and re.search(r"(?<!\w)" + re.escape(d_words) + r"(?!\w)", a_words)):
-                errors.append(f"{TERMS_FILE}: allowed term '{a}' contains denied term '{d}'; "
-                              "remove it or reword")
-    return errors
+            if not _conflicts(a, d) and re.search(_term_regex(d, plural=False), normalized):
+                notices.append(f"notice: allowed term '{a}' looks like denied term '{d}'; "
+                               "confirm at checkpoint 4 that it is a different word")
+    return notices
 
 
 def load_denylist(workspace: Path) -> list[str]:
@@ -133,10 +177,12 @@ def load_patterns(workspace: Path) -> tuple[Patterns, list[str]]:
     return compile_terms(denied, allowed), errors
 
 
-def _term_regex(term: str) -> str:
+def _term_regex(term: str, plural: bool = True) -> str:
     normalized = normalize(term)
     words = [w for w in re.split(_SEPARATOR + "+", normalized) if w]
     body = (_SEPARATOR + "*").join(map(re.escape, words)) if words else re.escape(normalized)
+    if not plural:
+        return body
     plural = r"(?:s|es)?" if sum(map(len, words)) >= _PLURAL_MIN_LENGTH else ""
     return body + plural
 
@@ -208,7 +254,7 @@ def check_file(workspace: Path, rel: str, patterns: Patterns | None = None) -> l
         patterns, errors = load_patterns(workspace)
         if errors:
             return errors
-    suffix = Path(rel).suffix
+    suffix = Path(rel).suffix.lower()
     fmt = {".json": "json", ".jsonl": "jsonl"}.get(suffix, "text")
     data, error = wsio.load(workspace, rel, fmt)
     if error:
