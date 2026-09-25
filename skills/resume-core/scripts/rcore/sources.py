@@ -61,10 +61,13 @@ def _allowed_labels(known: KnownSources) -> set[str]:
     return {label for label in labels if isinstance(label, str)}
 
 
+PROFILE_PATHS = frozenset({"03-profile/profile.json", "07-sanitized/profile.json", "decisions/profile.json"})
+
+
 def _is_tailored(rel: str) -> bool:
     """Fail closed: every resume is tailored unless its normalized path is a profile file
     (03-profile/profile.json, 07-sanitized/profile.json or decisions/profile.json)."""
-    return validation.schema_for(posixpath.normpath(rel)) != ("resume", "json")
+    return validation.logical_path(posixpath.normpath(rel.replace("\\", "/"))) not in PROFILE_PATHS
 
 
 def _pointer_error(doc: dict, pointer: str, filename: str) -> str | None:

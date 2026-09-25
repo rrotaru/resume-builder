@@ -239,3 +239,12 @@ def test_absolute_profile_path_inside_workspace_is_a_profile(workspace):
 
 def test_path_outside_the_workspace_is_an_error(workspace):
     assert sources.check_file(workspace, "../outside.json") == ["../outside.json: outside the workspace"]
+
+
+def test_profile_exemption_is_case_exact(workspace):
+    """Only the exact profile paths skip tailored checks; a look-alike path fails closed."""
+    from rcore.sources import _is_tailored
+    assert not _is_tailored("03-profile/profile.json")
+    assert not _is_tailored("./07-sanitized/profile.json")
+    assert _is_tailored("03-PROFILE/profile.json")
+    assert _is_tailored("08-ats/jobs/fintech-sre/resume.json")
