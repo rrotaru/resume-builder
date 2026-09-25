@@ -1,15 +1,20 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "JSON Resume document with resume-builder extensions (x-sources, x-highlights)",
+  "title": "JSON Resume document with resume-builder extensions (x-lines, x-highlights)",
   "type": "object",
   "properties": {
     "basics": {"type": "object"},
     "work": {"type": "array", "items": {"$ref": "#/$defs/entry"}},
+    "volunteer": {"type": "array", "items": {"$ref": "#/$defs/entry"}},
     "projects": {"type": "array", "items": {"$ref": "#/$defs/entry"}},
     "education": {"type": "array", "items": {"$ref": "#/$defs/dated"}},
-    "certificates": {"type": "array", "items": {"type": "object"}},
-    "skills": {"type": "array", "items": {"type": "object"}},
-    "x-sources": {"$ref": "#/$defs/sources"}
+    "awards": {"type": "array", "items": {"$ref": "#/$defs/item"}},
+    "certificates": {"type": "array", "items": {"$ref": "#/$defs/item"}},
+    "publications": {"type": "array", "items": {"$ref": "#/$defs/item"}},
+    "skills": {"type": "array", "items": {"$ref": "#/$defs/item"}},
+    "languages": {"type": "array", "items": {"$ref": "#/$defs/item"}},
+    "interests": {"type": "array", "items": {"$ref": "#/$defs/item"}},
+    "references": {"type": "array", "items": {"$ref": "#/$defs/item"}}
   },
   "$defs": {
     "date": {"type": "string", "pattern": "^\\d{4}(-\\d{2}(-\\d{2})?)?$"},
@@ -18,12 +23,28 @@
       "pattern": "^(ev_[0-9a-f]{8}([0-9a-f]{4})?|metric:m_[A-Za-z0-9_-]+|resume:/.*|wizard:/.*)$"
     },
     "sources": {"type": "array", "items": {"$ref": "#/$defs/sourceRef"}},
+    "lines": {
+      "description": "Lines of 03-profile/resume.txt the entry was read from (1-based, inclusive).",
+      "type": "object",
+      "required": ["first", "last"],
+      "additionalProperties": false,
+      "properties": {
+        "first": {"type": "integer", "minimum": 1},
+        "last": {"type": "integer", "minimum": 1}
+      }
+    },
+    "item": {
+      "type": "object",
+      "properties": {
+        "x-lines": {"$ref": "#/$defs/lines"}
+      }
+    },
     "dated": {
       "type": "object",
       "properties": {
         "startDate": {"$ref": "#/$defs/date"},
         "endDate": {"$ref": "#/$defs/date"},
-        "x-sources": {"$ref": "#/$defs/sources"}
+        "x-lines": {"$ref": "#/$defs/lines"}
       }
     },
     "entry": {
@@ -32,7 +53,7 @@
         "startDate": {"$ref": "#/$defs/date"},
         "endDate": {"$ref": "#/$defs/date"},
         "highlights": {"type": "array", "items": {"type": "string"}},
-        "x-sources": {"$ref": "#/$defs/sources"},
+        "x-lines": {"$ref": "#/$defs/lines"},
         "x-highlights": {
           "type": "array",
           "items": {

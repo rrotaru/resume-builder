@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 
 from rcore import config
@@ -32,3 +34,12 @@ def test_default_config_returns_independent_copies():
 def test_metric_prompt_count_rejects_minimum_above_maximum():
     with pytest.raises(ValueError, match="minimum 5 is greater than maximum 2"):
         config.metric_prompt_count(10, minimum=5, maximum=2)
+
+
+def test_config_paths_resolve_against_the_workspace(tmp_path, monkeypatch):
+    workspace = tmp_path / "ws"
+    monkeypatch.chdir(tmp_path)
+    assert config.resolve_path(workspace, "old-resume.pdf") == (tmp_path / "ws" / "old-resume.pdf").resolve()
+    assert config.resolve_path("ws", "exports/jira.csv") == (tmp_path / "ws" / "exports" / "jira.csv").resolve()
+    assert config.resolve_path(workspace, "/home/jordan/resume.pdf") == Path("/home/jordan/resume.pdf")
+    assert config.resolve_path(workspace, "~/resume.pdf") == Path.home() / "resume.pdf"

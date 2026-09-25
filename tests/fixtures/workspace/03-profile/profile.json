@@ -16,9 +16,10 @@
       "position": "Senior Software Engineer",
       "startDate": "2023-01",
       "highlights": [],
-      "x-sources": [
-        "resume:/work/0"
-      ]
+      "x-lines": {
+        "first": 7,
+        "last": 8
+      }
     },
     {
       "name": "Tailspin Toys",
@@ -28,9 +29,10 @@
       "highlights": [
         "Migrated the order service from PHP to Go, serving 2M requests per day"
       ],
-      "x-sources": [
-        "resume:/work/1"
-      ]
+      "x-lines": {
+        "first": 10,
+        "last": 12
+      }
     }
   ],
   "projects": [
@@ -39,9 +41,10 @@
       "url": "https://github.com/jrivera/ledger-lint",
       "startDate": "2021-04",
       "description": "Open-source linter for double-entry ledger files; 300 GitHub stars",
-      "x-sources": [
-        "resume:/projects/0"
-      ]
+      "x-lines": {
+        "first": 16,
+        "last": 18
+      }
     }
   ],
   "education": [
@@ -50,9 +53,10 @@
       "studyType": "BS",
       "area": "Computer Science",
       "endDate": "2019",
-      "x-sources": [
-        "resume:/education/0"
-      ]
+      "x-lines": {
+        "first": 22,
+        "last": 22
+      }
     }
   ],
   "skills": [
@@ -63,7 +67,11 @@
         "Python",
         "Redis",
         "PostgreSQL"
-      ]
+      ],
+      "x-lines": {
+        "first": 26,
+        "last": 26
+      }
     }
   ]
 }
