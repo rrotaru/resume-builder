@@ -8,6 +8,7 @@ Short names used below:
 - **Render spec** is the [resume-render spec](superpowers/specs/2026-09-25-resume-render-design.md).
 - **Import spec** is the [resume-import spec](superpowers/specs/2026-09-25-resume-import-design.md).
 - **Collect spec** is the [resume-collect spec](superpowers/specs/2026-09-25-resume-collect-design.md).
+- **Analyze spec** is the [resume-analyze spec](superpowers/specs/2026-09-25-resume-analyze-design.md).
 - **Core** is [`skills/resume-core/SKILL.md`](../skills/resume-core/SKILL.md): workspace rules, source references, the profile overlay and the checks.
 
 ## Start here
@@ -28,7 +29,7 @@ Short names used below:
 - **Stages:** write a stage only through `stage.py begin` and `stage.py commit` (see Core "Writing a stage"), or through `rcore.stages` from a script that runs its own check first, as `render.py` and `check_profile.py` do. Each numbered folder has exactly one writer. Only the wizard and the checkpoints write `decisions/`.
 - **Schemas:** every JSON or JSONL workspace file has a schema in `skills/resume-core/schemas/`, mapped by path in `FILE_SCHEMAS` (`rcore/validation.py`). A new JSON or JSONL file needs both. Text files (`stories.md`, `jd.txt`, `resume.txt`) and `01-raw/` have no schema by design; the validator reads only JSON and JSONL.
 - **Fixtures:** [`tests/fixtures/workspace/`](../tests/fixtures/workspace/) holds a made-up engineer's saved output for most stages. A new skill's output must stay valid input for the next stage, and in CI the saved output stands in for model-driven steps.
-- **Tests:** from the repository root, run `uv run skills/resume-render/scripts/render.py --install-browser` once, then `uv run --with pytest --with-requirements skills/resume-render/scripts/render.py --with-requirements skills/resume-import/scripts/extract_text.py pytest`. CI runs Python 3.10 and 3.13. A script that reads PDF or DOCX pins the same `pypdf` and `python-docx` versions as these two, so the command stays the same (a test checks `ingest_reviews.py`). A new skill's scripts folder goes into `pytest.ini` `pythonpath`.
+- **Tests:** from the repository root, run `uv run skills/resume-render/scripts/render.py --install-browser` once, then `uv run --with pytest --with-requirements skills/resume-render/scripts/render.py --with-requirements skills/resume-import/scripts/extract_text.py pytest`. CI runs Python 3.10 and 3.13. If the system Python's own packages break `pypdf` (a `pyo3_runtime.PanicException` from `cryptography`), install a uv-managed Python (`uv python install 3.13`) and add `UV_MANAGED_PYTHON=1` and `--python 3.13` to both commands. A script that reads PDF or DOCX pins the same `pypdf` and `python-docx` versions as these two, so the command stays the same (a test checks `ingest_reviews.py`). A new skill's scripts folder goes into `pytest.ini` `pythonpath`.
 - **Reviews:** a Codex bot reviews each PR. Verify every finding before acting, since some are wrong. Never weaken or skip a check to get green.
 
 ## Checklist
@@ -45,13 +46,13 @@ Short names used below:
   - Shipped `configure.py` (data notice, time range, sources, repos, git authors, review folder, resume), `ingest_export.py`, `ingest_git_log.py`, `ingest_reviews.py`, the report-only `normalize_github.py`, `normalize_gitlab.py` and `normalize_jira.py`, and `link.py`. `link.py` normalizes every raw file, removes duplicates, assigns IDs over all items, links them, and commits `01-raw` and `02-evidence`.
   - Every `01-raw/` line is a page, `{"query", "items", ...}`, with items as fetched. `raw_ref` is `01-raw/<file>:<line>#/items/<index>`. Every collect script refuses to run until the data notice is accepted.
   - Added to resume-core: `rcore/documents.py` (the document reader, moved from resume-import), optional `config.json` `git_authors`, and JSONL lines that stay whole when a string holds U+0085, U+2028 or U+2029. The fixture gains `01-raw/`, `exports/jira.csv` and `reviews/`, and `link.py` rebuilds its `02-evidence/evidence.jsonl` byte for byte.
-- [ ] **5. resume-analyze (checkpoint 2).** Arch [resume-analyze](superpowers/specs/2026-09-24-resume-builder-architecture-design.md#resume-analyze-checkpoint-2), "Project" in Data contracts, Decisions row "Metric prompts".
-  - Writes `04-projects/projects.json` (`projects.schema.json`; fixture exists) and `signals.json`. **`signals.json` has no schema or fixture yet: add both.**
-  - Scripts: `signals.py` and `match_projects.py`. ID continuity is a Jaccard similarity of 0.5 or more, one-to-one.
-  - Use `rcore.ids.project_id` and `rcore.config.metric_prompt_count`.
-  - Reads `decisions/projects.json` (`project-decisions.schema.json`). Shows orphaned decisions at checkpoint 2.
-  - `02-evidence/evidence.jsonl` is sorted by `created_at`. Authored work is `pr`, `mr` or `commit` with `engineer_role: author`. Reviews are `kind: review`, `engineer_role: reviewer`, and carry no `stats` because the size is the author's. A performance review's full text is in `01-raw/reviews.jsonl` at its `raw_ref`, since `excerpt` holds 500 characters (Collect spec [Normalization](superpowers/specs/2026-09-25-resume-collect-design.md#normalization)).
-  - `links` point from an item to what it references (a pull request to its ticket, a ticket to its epic). Cluster over both directions.
+- [x] **5. resume-analyze (checkpoint 2).** Analyze spec; [#6](https://github.com/rrotaru/resume-builder/pull/6).
+  - Shipped `signals.py`, `match_projects.py` and `decide.py`.
+    - `signals.py` begins `04-projects` and writes `signals.json`. It clusters evidence over links read both ways. Performance reviews count as mentions and never join clusters. It reads people and epic creators from the raw records.
+    - `match_projects.py` checks the model's `groups.json` and carries IDs forward from the last run's groups (Jaccard ≥ 0.5, one-to-one, best first). It applies `decisions/projects.json` in order, sets dates, ranks and metric prompts, and commits `04-projects` with `--commit`.
+    - `decide.py` is checkpoint 2's only writer of `decisions/projects.json`.
+  - `04-projects/` holds `signals.json`, `groups.json` and `projects.json`. `groups.json` is the model's grouping before decisions, with IDs. `projects.json` is the result after decisions, and the only file later stages read. An orphaned decision (its project is not in this run) is shown with the closest project and blocks the commit (exit 3) until it is re-linked or discarded.
+  - Added to resume-core: `signals.schema.json` and `project-groups.schema.json`, and the `set_rank` action (with `rank`) and an optional `rename` `summary` in `project-decisions.schema.json`. The fixture gains `04-projects/signals.json` and `groups.json`. The scripts rebuild them and `projects.json` byte for byte.
 - [ ] **6. resume-sanitize and resume-wizard (checkpoint 3).** Arch [resume-sanitize](superpowers/specs/2026-09-24-resume-builder-architecture-design.md#resume-sanitize) and [resume-wizard](superpowers/specs/2026-09-24-resume-builder-architecture-design.md#resume-wizard-checkpoint-3); Core "The profile" and "Checks".
   - Sanitize scan writes `05-terms/candidates.json` (`term-candidates.schema.json`; fixture exists).
   - Sanitize apply writes `07-sanitized/`: `bullets.json`, `profile.json`, `stories.md` and `new-terms.json`. The fixture has all but `new-terms.json`.
@@ -61,9 +62,12 @@ Short names used below:
   - **Must** (wizard) write profile answers under the overlay rules. Arrays of objects merge by index, and `{}` keeps an imported entry, so `"work": [{}, {"endDate": "2022-12"}]` fills the second job's end date (Core "The profile").
   - **Must** (wizard) ask for a replacement value when a fact field contains a denied term, and store it at that path in `decisions/profile.json`.
   - The wizard owns fixing answers that a re-import moved: `check_profile.py --commit` prints a `warning:` for each (Import spec [Re-import](superpowers/specs/2026-09-25-resume-import-design.md#re-import)).
+  - The wizard asks for metrics only for projects with `metric_prompt: true`. A metric's `project_id` is that project's `id` in `04-projects/projects.json`. `match_projects.py` prints a `warning:` for a metric whose project is gone (excluded, merged away or regrouped), and the wizard re-links or removes it, because it owns `decisions/metrics.json`.
+  - The sanitize scan reads `04-projects/projects.json` (`internal_name`, `summary`, `rank_reasons`). `signals.json` and `groups.json` repeat evidence titles and names from before the engineer's renames, but nothing renders them.
 - [ ] **7. resume-write.** Arch [resume-write](superpowers/specs/2026-09-24-resume-builder-architecture-design.md#resume-write), "Bullet" in Data contracts.
   - Writes `06-bullets/bullets.json` (`bullets.schema.json`; fixture exists) and `06-bullets/stories.md` (text, unsanitized).
   - Use `xyz_quantified` only when a confirmed metric exists, otherwise `xyz`. Every bullet has non-empty `sources`, and bullets for earlier roles set `work_ref` and cite `resume:` pointers.
+  - Read `04-projects/projects.json`, never `groups.json`. Performance reviews are never in a project's `evidence_ids`, so cite them directly (`ev_…`) where they support a bullet. `start` and `end` are the months of the project's evidence, not job dates. A part split off by the engineer has an empty `summary` until it is renamed.
 - [ ] **8. resume-ats.** Arch [resume-ats](superpowers/specs/2026-09-24-resume-builder-architecture-design.md#resume-ats) and "Tailored resume" in Data contracts.
   - Writes `08-ats/general/` (`resume.json`, `report.json`) and `08-ats/jobs/<slug>/` (`jd.txt`, `resume.json`, `report.json`, `flags.json`).
   - `resume.json` and `flags.json` have schemas and fixtures. **`report.json` has no schema yet: add one.**
@@ -77,6 +81,9 @@ Short names used below:
   - Orchestrates the whole run, offers to reuse fresh stages (`stage.py status`), and runs checkpoints 1 to 4. Interrupted runs resume from `decisions/`.
   - `03-profile` records no stage inputs, because the resume file is outside the workspace, so `stage.py status` always calls it fresh. Before reusing it, compare `03-profile/source.json` `path` and `sha256` with `config.json` `resume_path` and that file (Import spec [Pipeline](superpowers/specs/2026-09-25-resume-import-design.md#pipeline)).
   - `01-raw` records no inputs either, so `stage.py status` always calls it fresh. Build decides when to collect again, for example from `02-evidence/_stage.json` `created_at`. An unfinished collection is a `01-raw.tmp/` folder, possibly holding a `<source>.partial.jsonl`: continue it rather than running `stage.py begin 01-raw`, which deletes it (Collect spec [SKILL.md](superpowers/specs/2026-09-25-resume-collect-design.md#skillmd)).
+  - **Must** (checkpoint 2) record the engineer's project choices only with resume-analyze's `decide.py`, never by editing `decisions/projects.json` or regrouping `groups.json`. Its evidence snapshots are what orphan suggestions use (Analyze spec [Project decisions](superpowers/specs/2026-09-25-resume-analyze-design.md#project-decisions)).
+  - Checkpoint 2 left unfinished is a `04-projects.tmp/` holding `groups.json`: continue it with `match_projects.py`. `signals.py` begins a fresh `04-projects.tmp/` and discards the draft. When the evidence has not changed, reuse the committed grouping with `stage.py begin 04-projects --from-current` and `match_projects.py`. `match_projects.py --commit` exits 3 while a decision is orphaned.
+  - `04-projects` records `01-raw`, `02-evidence/evidence.jsonl`, `config.json` and `decisions/projects.json` as inputs, so a decision recorded after the commit makes it stale.
   - **Must** (checkpoint 4) show every allowed-term notice (`rcore.terms.allowed_notices`) and have the engineer confirm each.
   - **Must** (checkpoint 4) let the engineer accept, revert or edit each flagged job bullet, writing `decisions/attestations.json`. Render's `fix:` lines send flagged bullets to `/resume-builder:build`.
 
@@ -84,4 +91,5 @@ Short names used below:
 
 - [ ] **Terms check and control characters.** `check_terms.py` doesn't treat control characters that aren't whitespace (such as U+0001) as separators, so `Project\u0001Falcon` passes it in a JSON file. Render's output check still catches it. The likely fix is to add them to `_SEPARATOR` in `rcore/terms.py`.
 - [ ] **CI actions on Node 20.** CI warns that `actions/checkout@v4` and `astral-sh/setup-uv@v6` target Node 20. Bump both to their current major versions.
+- [ ] **Merge-aware ID matching.** When the model itself groups the projects of a merge decision together, the group takes the ID of the project it overlaps most. If that is a project named in `merge_with`, the merge and the other decisions about the merged project are orphaned, and the engineer re-links or discards them (Analyze spec [Orphans](superpowers/specs/2026-09-25-resume-analyze-design.md#orphans)). `match_projects.py` could instead match such a group against the merged projects together, so the merged project keeps its ID.
 - [ ] **Playwright pin.** `render.py` pins `playwright==1.56.0` (Chromium build 1194). Bumping it also changes the browser build that `--install-browser` fetches.

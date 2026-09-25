@@ -17,7 +17,7 @@ A plugin of agent skills that helps a software engineer build a resume from evid
 | Confidentiality | Dedicated sanitize skill. The engineer approves generalizations, which are stored in `decisions/terms.json`. A script-enforced hard check at render blocks any denylisted term. |
 | Data notice | Before collection, a one-time notice that work data (including performance reviews) is sent to the model provider. The engineer confirms before anything is pulled. |
 | Claim provenance | Strict. Every bullet cites evidence IDs, confirmed metrics, the imported resume, or wizard answers. Render blocks unsourced bullets. The model may suggest metric *types* but never invents values. |
-| Metric prompts | Only for the top N projects. `N = min(project_count, clamp(ceil(0.30 × project_count), 3, 8))`. Percent, floor and cap are configurable. Other projects use the non-numeric XYZ form. |
+| Metric prompts | Only for the top N projects. `N = min(project_count, clamp(ceil(0.30 × project_count), 3, 8))`, counting projects after exclusions. Percent, floor and cap are configurable. Other projects use the non-numeric XYZ form. |
 | v1 sources | GitHub, GitLab (connector or file export), local git repos (`git log`), Jira (connector or CSV/JSON export), and a folder of exported performance reviews (PDF/DOCX/TXT). |
 | Resume import | PDF, DOCX, TXT, Markdown, JSON Resume. |
 | Outputs | PDF (HTML template printed by Playwright/Chromium), DOCX (`python-docx`), plain text, and `stories.md` (STAR narratives per top project). |
@@ -51,7 +51,7 @@ resume-builder/
     resume-import/
       scripts/               # extract_text.py, check_profile.py
     resume-analyze/
-      scripts/               # signals.py, match_projects.py
+      scripts/               # signals.py, match_projects.py, decide.py
     resume-sanitize/
     resume-wizard/
     resume-write/
@@ -93,7 +93,7 @@ resume-workspace/
   01-raw/                # resume-collect: pages as fetched or loaded, one JSONL per source
   02-evidence/           # resume-collect: normalized evidence.jsonl
   03-profile/            # resume-import: profile.json (JSON Resume), resume.txt, source.json
-  04-projects/           # resume-analyze: projects.json, signals.json
+  04-projects/           # resume-analyze: projects.json, groups.json, signals.json
   05-terms/              # resume-sanitize scan: candidates.json
   06-bullets/            # resume-write: bullets.json, stories.md
   07-sanitized/          # resume-sanitize apply: bullets.json, profile.json, stories.md, new-terms.json
@@ -164,7 +164,10 @@ All files are JSON or JSONL and validated against `resume-core/schemas`.
 
 - `role`: `lead | core | supporting`
 - `scope`: `team | cross-team | org | company`
-- **ID continuity.** A new project inherits a previous project's ID when their evidence sets have Jaccard similarity ≥ 0.5 (best match wins, one-to-one). New projects get fresh IDs. Decisions referencing an unmatched ID are shown as *orphaned* at checkpoint 2, to re-link or discard.
+- `start` and `end` are the months of the project's earliest and latest evidence dates (`created_at` or `closed_at`); `end` is never null. `evidence_ids` are sorted, each item belongs to at most one project, and performance reviews are never part of one.
+- `rank` runs from 1. `metric_prompt` is true for ranks 1 to N, the "Metric prompts" rule in the Decisions table at the top, counting the projects left after the engineer's exclusions.
+- **Groups and projects.** The model writes `04-projects/groups.json`, its grouping before the engineer's decisions. `match_projects.py` gives each group an ID, then applies `decisions/projects.json` in order to produce `projects.json`, which is what later stages read.
+- **ID continuity.** A new group inherits a group ID from the last run's `groups.json` when their evidence sets have Jaccard similarity ≥ 0.5 (best match wins, one-to-one). Other groups get `rcore.ids.project_id` of their evidence. Matching groups before decisions, rather than projects after them, compares like with like, so a merge or an exclusion applies the same way on the next run. Decisions referencing an ID that is not a project in this run are shown as *orphaned* at checkpoint 2, to re-link or discard, and block the commit. See the [resume-analyze spec](2026-09-25-resume-analyze-design.md#id-continuity).
 
 ### Bullet (`06-bullets/bullets.json`, `07-sanitized/bullets.json`)
 
@@ -183,7 +186,7 @@ All files are JSON or JSONL and validated against `resume-core/schemas`.
 | File | Record |
 |---|---|
 | `terms.json` | `{term, replacement \| null, kind: codename\|customer\|product\|url\|financial\|other}`. `null` means allowed as-is. |
-| `projects.json` | `{project_id, action: exclude\|merge\|split\|rename\|set_role\|set_scope, ...}` |
+| `projects.json` | `{project_id, action: exclude\|merge\|split\|rename\|set_role\|set_scope\|set_rank, merge_with?, split_groups?, name?, summary?, role?, scope?, rank?, evidence_ids?}`, written only by `decide.py` at checkpoint 2 and applied in order ([resume-analyze spec](2026-09-25-resume-analyze-design.md#project-decisions)) |
 | `metrics.json` | `{id, project_id, value, unit, statement}` |
 | `profile.json` | JSON Resume fragments supplied by the wizard |
 | `attestations.json` | `{job_slug, bullet_id, text_sha256, action: accept\|edit}` |
@@ -235,10 +238,11 @@ Detailed in the [resume-collect spec](2026-09-25-resume-collect-design.md).
 Detailed in the [resume-import spec](2026-09-25-resume-import-design.md). `extract_text.py` extracts text from PDF (`pypdf`), DOCX (`python-docx`), TXT or MD into `03-profile/resume.txt`, or loads a JSON Resume directly. The model maps the text into `03-profile/profile.json`, copying every value exactly and citing each entry's lines in `x-lines`. `check_profile.py` checks that the profile says only what the resume says, then commits the stage.
 
 ### resume-analyze (checkpoint 2)
-- **Script:** `signals.py` computes per linked cluster: authored vs. reviewed counts, duration, repo and contributor counts, epic creation, first commit, and performance-review mentions.
-- **Model:** groups evidence into projects, assigns role and scope from signals, ranks them, applies `decisions/projects.json`, and sets `metric_prompt` for the top N.
-- **Script:** `match_projects.py` carries IDs forward from the previous run.
-- **Checkpoint 2:** the engineer reviews grouping, role, scope and ranking (merge, split, rename, exclude, correct), and resolves orphaned decisions.
+Detailed in the [resume-analyze spec](2026-09-25-resume-analyze-design.md).
+- **Script:** `signals.py` computes per linked cluster (links read both ways; performance reviews count as mentions and never join clusters): authored vs. reviewed counts, duration, size, repo and contributor counts, epic creation, whether the engineer's code came first, open items, and performance-review mentions.
+- **Model:** groups evidence into projects, assigns role and scope from signals, and ranks them, in `04-projects.tmp/groups.json`.
+- **Script:** `match_projects.py` checks the groups, carries IDs forward from the previous run's groups, applies `decisions/projects.json`, sets dates, ranks and `metric_prompt` for the top N, and commits `04-projects`.
+- **Checkpoint 2:** the engineer reviews grouping, role, scope and ranking (merge, split, rename, exclude, set role, scope or rank). `decide.py` records each choice, and orphaned decisions are re-linked or discarded before the commit.
 
 ### resume-sanitize
 - **Scan** (before the wizard): finds candidate sensitive terms in projects, evidence excerpts and the profile, and proposes generalizations into `05-terms/candidates.json`.
@@ -289,7 +293,7 @@ Every checkpoint persists its choices to `decisions/`, so an interrupted run res
 | Malformed export rows | Report the first 10 bad rows per source with line numbers, process the rest, record the count as `skipped_rows` in `02-evidence/_stage.json`. |
 | Scanned PDF without text | Explain, and ask for DOCX, TXT or pasted text. No OCR in v1. |
 | Stale stages | List them and offer to rebuild in dependency order. |
-| Orphaned project decisions | Presented at checkpoint 2 to re-link or discard. |
+| Orphaned project decisions | Presented at checkpoint 2 to re-link or discard, with the closest current project. `match_projects.py` commits nothing while one remains. |
 | Render check fails | No output files. Failing records listed with the fixing command. |
 
 ## Testing
@@ -318,8 +322,8 @@ Each gets its own spec → plan → implementation cycle, in this order. Progres
 1. **resume-core** and **resume-init:** schemas, the `rcore` library, `validate.py`, `stage.py`, the three checks, workspace creation, fixture workspace, skill lint, CI.
 2. **resume-render:** template, PDF/DOCX/TXT output, render tests ([spec](2026-09-25-resume-render-design.md)).
 3. **resume-import:** text extraction and profile mapping ([spec](2026-09-25-resume-import-design.md)).
-4. **resume-collect:** connector discovery, normalizers, git log, reviews, linking.
-5. **resume-analyze:** signals, grouping, role and scope, ranking, ID continuity.
+4. **resume-collect:** connector discovery, normalizers, git log, reviews, linking ([spec](2026-09-25-resume-collect-design.md)).
+5. **resume-analyze:** signals, grouping, role and scope, ranking, ID continuity ([spec](2026-09-25-resume-analyze-design.md)).
 6. **resume-sanitize** and **resume-wizard.**
 7. **resume-write:** XYZ bullets and STAR stories.
 8. **resume-ats:** lint, keywords, per-job tailoring and claim diffing.

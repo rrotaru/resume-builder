@@ -2,6 +2,11 @@
   {
     "project_id": "pj_da2a2b53",
     "action": "set_role",
-    "role": "lead"
+    "role": "lead",
+    "evidence_ids": [
+      "ev_191cc8ce",
+      "ev_56410ed1",
+      "ev_99a74656"
+    ]
   }
 ]
