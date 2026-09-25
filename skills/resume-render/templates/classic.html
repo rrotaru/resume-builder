@@ -1,0 +1,71 @@
+{#- Single-column, ATS-safe resume. No tables, images, icons or CSS columns.
+    Filled by rrender/html.py from the render model; autoescaping is on. -#}
+{% macro link(item) %}{% if item.href %}<a href="{{ item.href }}">{{ item.text }}</a>{% else %}{{ item.text }}{% endif %}{% endmacro %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>{{ doc.name }} resume</title>
+<style>
+@font-face { font-family: "Carlito"; font-weight: 400; src: url("{{ fonts.regular }}") format("woff2"); }
+@font-face { font-family: "Carlito"; font-weight: 700; src: url("{{ fonts.bold }}") format("woff2"); }
+html { font-family: "Carlito", sans-serif; font-size: 10.5pt; line-height: 1.3; color: #000; background: #fff; }
+body { margin: 0; }
+/* Keep whole words in the PDF text layer: no ligatures, no automatic hyphenation. */
+* { font-variant-ligatures: none; hyphens: manual; text-align: left; }
+p { margin: 0; }
+a { color: inherit; text-decoration: none; }
+h1 { font-size: 20pt; line-height: 1.1; font-weight: 700; margin: 0; }
+.label { font-size: 12pt; margin-top: 2pt; }
+.contacts { margin-top: 4pt; }
+h2 { font-size: 11.5pt; font-weight: 700; margin: 12pt 0 4pt; padding-bottom: 1.5pt;
+     border-bottom: 0.75pt solid #000; break-after: avoid; }
+.item { margin-bottom: 6pt; }
+.item:last-child { margin-bottom: 0; }
+.head { break-inside: avoid; break-after: avoid; }
+.title { font-weight: 700; }
+.line { margin-bottom: 2pt; }
+ul { margin: 2pt 0 0; padding-left: 14pt; }
+li { margin-bottom: 2pt; break-inside: avoid; }
+</style>
+</head>
+<body>
+<h1>{{ doc.name }}</h1>
+{% if doc.label %}
+<p class="label">{{ doc.label }}</p>
+{% endif %}
+{% if doc.contacts %}
+<p class="contacts">{% for contact in doc.contacts %}{% if not loop.first %}{{ sep }}{% endif %}{{ link(contact) }}{% endfor %}</p>
+{% endif %}
+{% for section in doc.sections %}
+<section>
+<h2>{{ section.heading }}</h2>
+{% if section.paragraph %}
+<p>{{ section.paragraph }}</p>
+{% endif %}
+{% for line in section.lines %}
+<p class="line">{% if line.label %}<strong>{{ line.label }}:</strong> {% endif %}{{ line.text }}</p>
+{% endfor %}
+{% for item in section.items %}
+<div class="item">
+<div class="head">
+{% if item.title %}
+<p class="title">{{ item.title }}</p>
+{% endif %}
+{% if item.dates or item.details %}
+<p class="meta">{{ item.dates | join(dash) }}{% for detail in item.details %}{% if item.dates or not loop.first %}{{ sep }}{% endif %}{{ link(detail) }}{% endfor %}</p>
+{% endif %}
+</div>
+{% if item.bullets %}
+<ul>
+{% for bullet in item.bullets %}
+<li>{{ bullet }}</li>
+{% endfor %}
+</ul>
+{% endif %}
+</div>
+{% endfor %}
+</section>
+{% endfor %}
+</body>
+</html>

@@ -51,6 +51,9 @@ HEADINGS = {
     "certificates": "Certifications",
 }
 LINK_SCHEMES = ("http://", "https://", "mailto:")
+# Punctuation the PDF and DOCX writers add (the TXT writer uses ASCII instead).
+DASH = " \u2013 "  # between the dates of a range
+SEP = " \u00b7 "  # between contact items and details
 _SPACE = re.compile(r"[\s\x00-\x1f\x7f-\x9f]+")
 
 
