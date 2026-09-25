@@ -5,9 +5,11 @@ import posixpath
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from . import validation, wsio
+from . import facts, schema, validation, wsio
+from .profile import overlay
 
-LABEL_ERROR = "basics.label must match the target role in config.json or the imported profile's label"
+LABEL_ERROR = "basics.label must match the target role in config.json or the profile's label"
+SCHEMA_ERROR = "does not match its schema; run validate.py"
 
 
 @dataclass
@@ -18,6 +20,11 @@ class KnownSources:
     wizard: dict = field(default_factory=dict)
     target_role: str | None = None  # config.json target_role
     errors: list[str] = field(default_factory=list)  # files present but unreadable
+
+    @property
+    def effective(self) -> dict:
+        """The imported profile with wizard answers laid over it (see profile.py)."""
+        return overlay(self.profile, self.wizard)
 
 
 def _ids(records) -> set[str]:
@@ -56,7 +63,7 @@ def load_known(workspace: Path) -> KnownSources:
 
 
 def _allowed_labels(known: KnownSources) -> set[str]:
-    basics = known.profile.get("basics")
+    basics = known.effective.get("basics")
     labels = {known.target_role, basics.get("label") if isinstance(basics, dict) else None}
     return {label for label in labels if isinstance(label, str)}
 
@@ -124,10 +131,11 @@ def check_resume(resume: dict, known: KnownSources, label: str,
     - Each x-highlight, and basics.summary if present (as bullet "summary",
       citing basics.x-summary-sources), must cite sources that resolve.
     - In a tailored resume, basics.label (if present) must equal config.json
-      target_role or 03-profile/profile.json basics.label. tailored defaults
-      to True unless label, normalized, is a profile path (03-profile,
-      07-sanitized or decisions profile.json); any other or unknown path is
-      treated as tailored.
+      target_role or the effective profile's basics.label, and every other
+      non-bullet field must be copied from the effective profile (facts.py).
+      tailored defaults to True unless label, normalized, is a profile path
+      (03-profile, 07-sanitized or decisions profile.json); any other or
+      unknown path is treated as tailored.
     """
     if tailored is None:
         tailored = _is_tailored(label)
@@ -147,6 +155,8 @@ def check_resume(resume: dict, known: KnownSources, label: str,
         value = basics["label"]
         if not isinstance(value, str) or value not in _allowed_labels(known):
             errors.append(f"{label}: {LABEL_ERROR}")
+    if tailored:
+        errors += facts.check(resume, known.effective, label)
     if isinstance(basics, dict) and "summary" in basics:
         bullets.append({"id": "summary", "sources": basics.get("x-summary-sources")})
     bullets += [
@@ -160,7 +170,9 @@ def check_file(workspace: Path, rel: str, known: KnownSources | None = None) -> 
     """Check a bullets file (JSON array) or a tailored resume (JSON object).
 
     When known is not given it is loaded here, and any problems reading the
-    source files are reported first. rel is normalized (an absolute path
+    source files are reported first. A resume that does not match its schema
+    (tailored-resume, or resume for the profile files) is reported with one
+    line and not checked further, since the checks assume its shape. rel is normalized (an absolute path
     inside the workspace is made relative); a path outside the workspace is
     an error.
     """
@@ -177,5 +189,9 @@ def check_file(workspace: Path, rel: str, known: KnownSources | None = None) -> 
     if isinstance(data, list):
         return errors + check_bullets(data, known, rel)
     if isinstance(data, dict):
-        return errors + check_resume(data, known, rel, tailored=_is_tailored(normalized))
+        tailored = _is_tailored(normalized)
+        spec = schema.load_schema("tailored-resume" if tailored else "resume")
+        if schema.validate(data, spec):
+            return errors + [f"{rel}: {SCHEMA_ERROR}"]
+        return errors + check_resume(data, known, rel, tailored=tailored)
     return errors + [f"{rel}: expected a bullets array or a resume object"]

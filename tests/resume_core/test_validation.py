@@ -137,12 +137,12 @@ def test_tailored_resume_objects_are_closed(workspace):
         resume["skills"][0]["summary"] = "x"
     assert _edit_job(workspace, change) == [
         f"{JOB}: $.basics.location.planet: unexpected property",
-        f"{JOB}: $.basics.objective: unexpected property",
         f"{JOB}: $.basics.profiles[0].note: unexpected property",
-        f"{JOB}: $.education[0].courses: unexpected property",
-        f"{JOB}: $.skills[0].summary: unexpected property",
+        f"{JOB}: $.basics.objective: unexpected property",
         f"{JOB}: $.projects[0].keywords: unexpected property",
+        f"{JOB}: $.education[0].courses: unexpected property",
         f"{JOB}: $.certificates[0].summary: unexpected property",
+        f"{JOB}: $.skills[0].summary: unexpected property",
     ]
 
 
@@ -155,12 +155,23 @@ def test_tailored_resume_accepts_every_allowed_field(workspace):
         resume["work"][0].update(url="https://x", location="Denver", endDate="2024-01")
         resume["projects"] = [{"name": "P", "position": "Lead", "url": "https://x", "location": "Remote",
                                "startDate": "2023", "endDate": "2024", "highlights": [],
-                               "x-highlights": [], "x-sources": ["ev_191cc8ce"]}]
+                               "x-highlights": []}]
         resume["education"][0].update(url="https://x", startDate="2015", score="3.8")
-        resume["certificates"] = [{"name": "CKA", "date": "2024-05", "issuer": "CNCF", "url": "https://x",
-                                   "x-sources": ["ev_191cc8ce"]}]
-        resume["skills"][0].update(level="Expert", **{"x-sources": ["ev_191cc8ce"]})
+        resume["certificates"] = [{"name": "CKA", "date": "2024-05", "issuer": "CNCF", "url": "https://x"}]
+        resume["skills"][0].update(level="Expert")
     assert _edit_job(workspace, change) == []
+
+
+def test_tailored_resume_entries_carry_no_x_sources(workspace):
+    def change(resume):
+        resume["basics"]["x-sources"] = ["wizard:/basics/email"]
+        resume["work"][0]["x-sources"] = ["resume:/work/0/name"]
+        resume["education"][0]["x-sources"] = ["resume:/education/0/institution"]
+    assert _edit_job(workspace, change) == [
+        f"{JOB}: $.basics.x-sources: unexpected property",
+        f"{JOB}: $.work[0].x-sources: unexpected property",
+        f"{JOB}: $.education[0].x-sources: unexpected property",
+    ]
 
 
 def test_schema_for_normalizes_paths():

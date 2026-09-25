@@ -140,26 +140,32 @@ def test_summary_with_unresolved_source_fails(workspace):
 
 
 def test_highlights_outside_work_and_projects_fail(workspace):
-    def change(resume):
-        resume["education"][0]["highlights"] = ["Graduated top of class"]
-        resume["skills"][0]["highlights"] = ["Unsourced claim"]
-    _edit_general(workspace, change)
-    assert sources.check_file(workspace, TAILORED[0]) == [
+    resume = wsio.read_json(workspace / TAILORED[0])
+    resume["education"][0]["highlights"] = ["Graduated top of class"]
+    resume["skills"][0]["highlights"] = ["Unsourced claim"]
+    known = sources.load_known(workspace)
+    assert sources.check_resume(resume, known, TAILORED[0]) == [
         "08-ats/general/resume.json: /education/0: highlights are only allowed in work and projects",
         "08-ats/general/resume.json: /skills/0: highlights are only allowed in work and projects",
     ]
 
 
+def test_schema_rejects_highlights_before_the_source_check_runs(workspace):
+    _edit_general(workspace, lambda r: r["education"][0].update(highlights=["Graduated top of class"]))
+    assert sources.check_file(workspace, TAILORED[0]) == [
+        "08-ats/general/resume.json: does not match its schema; run validate.py"
+    ]
+
+
 def test_project_highlights_must_match_x_highlights(workspace):
-    _edit_general(workspace, lambda r: r.update(projects=[
-        {"name": "Side project", "highlights": ["Unsourced"], "x-highlights": []}]))
+    _edit_general(workspace, lambda r: r["projects"][0].update(highlights=["Unsourced"]))
     assert sources.check_file(workspace, TAILORED[0]) == [
         "08-ats/general/resume.json: /projects/0: highlights do not match x-highlights"
     ]
 
 
 JOB = "08-ats/jobs/fintech-sre/resume.json"
-LABEL_ERROR = "basics.label must match the target role in config.json or the imported profile's label"
+LABEL_ERROR = "basics.label must match the target role in config.json or the profile's label"
 
 
 def _edit_job(workspace, change):

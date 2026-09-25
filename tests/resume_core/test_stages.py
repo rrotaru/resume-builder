@@ -118,7 +118,7 @@ def test_begin_from_current_discards_leftover_tmp(workspace):
     tmp = stages.begin(workspace, "06-bullets")
     (tmp / "junk.txt").write_text("x")
     tmp = stages.begin(workspace, "06-bullets", from_current=True)
-    assert sorted(p.name for p in tmp.iterdir()) == ["bullets.json"]
+    assert sorted(p.name for p in tmp.iterdir()) == ["bullets.json", "stories.md"]
 
 
 def test_status_and_begin_recover_from_interrupted_swap(workspace):

@@ -7,9 +7,12 @@
       "city": "Denver",
       "region": "CO"
     },
-    "x-sources": [
-      "resume:/basics",
-      "wizard:/basics/email"
+    "profiles": [
+      {
+        "network": "GitHub",
+        "username": "jrivera",
+        "url": "https://github.com/jrivera"
+      }
     ]
   },
   "work": [
@@ -59,15 +62,38 @@
       ]
     }
   ],
+  "projects": [
+    {
+      "name": "ledger-lint",
+      "url": "https://github.com/jrivera/ledger-lint",
+      "startDate": "2021-04",
+      "highlights": [
+        "Built ledger-lint, an open-source linter for double-entry ledger files with 300 GitHub stars"
+      ],
+      "x-highlights": [
+        {
+          "bullet_id": "b_4",
+          "text": "Built ledger-lint, an open-source linter for double-entry ledger files with 300 GitHub stars",
+          "sources": [
+            "resume:/projects/0/description"
+          ]
+        }
+      ]
+    }
+  ],
   "education": [
     {
       "institution": "State University",
       "studyType": "BS",
       "area": "Computer Science",
-      "endDate": "2019",
-      "x-sources": [
-        "resume:/education/0"
-      ]
+      "endDate": "2019"
+    }
+  ],
+  "certificates": [
+    {
+      "name": "AWS Certified Solutions Architect - Associate",
+      "issuer": "Amazon Web Services",
+      "date": "2024-05"
     }
   ],
   "skills": [

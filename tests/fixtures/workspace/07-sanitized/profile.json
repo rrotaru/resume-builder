@@ -1,7 +1,14 @@
 {
   "basics": {
     "name": "Jordan Rivera",
-    "label": "Backend Engineer"
+    "label": "Backend Engineer",
+    "profiles": [
+      {
+        "network": "GitHub",
+        "username": "jrivera",
+        "url": "https://github.com/jrivera"
+      }
+    ]
   },
   "work": [
     {
@@ -23,6 +30,17 @@
       ],
       "x-sources": [
         "resume:/work/1"
+      ]
+    }
+  ],
+  "projects": [
+    {
+      "name": "ledger-lint",
+      "url": "https://github.com/jrivera/ledger-lint",
+      "startDate": "2021-04",
+      "description": "Open-source linter for double-entry ledger files; 300 GitHub stars",
+      "x-sources": [
+        "resume:/projects/0"
       ]
     }
   ],
