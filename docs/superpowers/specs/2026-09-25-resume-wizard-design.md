@@ -35,7 +35,7 @@ The architecture spec and the roadmap leave these open:
 | Term checks | `answer.py term` validates the whole of `decisions/terms.json` before writing: the schema, allowed terms that contain a denied term (`rcore.terms.allowed_conflicts`), and replacements that contain a denied term (`rcore.terms.replacement_conflicts`) (gap 6). |
 | Fact fields | Every fact field a tailored resume may copy (`rcore.facts.fact_values`) that holds a denied term is a question, answered with `answer.py profile` at that path. A keyword cannot be replaced, so a keyword holding a denied term is a `note:`: resume-ats leaves it out (gap 7). |
 | New terms | The wizard asks about undecided terms from `05-terms/candidates.json` and from `07-sanitized/new-terms.json`, so checkpoint 4 decides new terms by running the wizard (gap 8). |
-| Which questions can be skipped | Missing profile fields and metrics. A moved answer, a metric whose project is gone, a term and a fact field holding a denied term must be resolved, because each would otherwise leave a wrong or blocked value in a later stage. |
+| Which questions can be skipped | Missing profile fields (except the name, which render needs) and metrics. A moved answer, a metric whose project is gone, a term and a fact field holding a denied term must be resolved, because each would otherwise leave a wrong or blocked value in a later stage. |
 
 ## Skill layout
 
@@ -51,8 +51,7 @@ skills/resume-wizard/
       profile.py           # profile answers: pointers, overlay padding, fact fields, moved answers
       terms.py             # term decisions and their checks
       metrics.py           # metrics: IDs, the value in the statement, projects that are gone
-      questions.py         # computing the open questions
-      report.py            # what the scripts print
+      questions.py         # computing the open questions and how each is answered
 skills/resume-core/schemas/
   wizard-state.schema.json # new: decisions/wizard.json
 ```
@@ -98,7 +97,7 @@ uv run scripts/answer.py --workspace WS unskip QUESTION
 | 5 | `profile:/basics/phone` | A [missing profile field](#missing-profile-fields) | `profile`, `add` or `skip` |
 | 6 | `metric:pj_da2a2b53` | A project with `metric_prompt: true` that has no metric | `metric` or `skip` |
 
-A question already skipped is not listed, unless `--all` is given, when it is listed with `(skipped)`. Nothing is asked about a project without `metric_prompt`. The last line counts the open questions: `wizard: 3 open questions` or `wizard: no open questions`.
+A question already skipped is not listed, unless `--all` is given, when it is listed with `(skipped)`. Nothing is asked about a project without `metric_prompt`. The last line counts the open questions: `wizard: 3 open questions` or `wizard: no open questions`, followed by `, 1 skipped (questions.py --all lists them)` when there are skips.
 
 Each question prints as its key, a description, and the commands that resolve it:
 
@@ -128,7 +127,7 @@ On the effective profile (`rcore.profile.effective_profile`):
 
 | Key | Asked when | Answered by |
 |---|---|---|
-| `profile:/basics/name` | no name (render needs one) | `/basics/name` |
+| `profile:/basics/name` | no name (render needs one, so it cannot be skipped) | `/basics/name` |
 | `profile:/basics/email` | no email | `/basics/email` |
 | `profile:/basics/phone` | no phone | `/basics/phone` |
 | `profile:/basics/location` | no `location.city` | `/basics/location/city`, and `region` and `countryCode` when the engineer gives them |
@@ -138,7 +137,7 @@ On the effective profile (`rcore.profile.effective_profile`):
 | `profile:/education` | no education | `/education/-/institution` and the rest, or `skip` |
 | `profile:/education/0/institution`, `/studyType`, `/area`, `/endDate` | an education entry without it | that path |
 | `profile:/certificates` | no certificates | `/certificates/-/name` and the rest, or `skip` |
-| `profile:/certificates/0/issuer`, `/date` | a certificate without it | that path |
+| `profile:/certificates/0/name`, `/issuer`, `/date` | a certificate without it | that path |
 
 ## Recording answers
 
@@ -187,7 +186,7 @@ error: decisions/terms.json: the replacement for 'Project Falcon' ('Contoso-grad
 decisions/ unchanged
 ```
 
-After recording, it prints the allowed-term notices and, when a newly denied term appears in a fact field, `run questions.py: 1 fact field now holds a denied term`. `answer.py remove-term TERM` removes a decision. It needs only a JSON list to work on, so it can repair a file the checks reject.
+After recording, it prints the allowed-term notices and, when a fact field holds a denied term, `1 fact field of the profile holds a denied term: questions.py lists them as fact: questions`. `answer.py remove-term TERM` removes a decision. It needs only a JSON list to work on, so it can repair a file the checks reject.
 
 ### Metrics
 
@@ -247,7 +246,7 @@ Never edit `decisions/` by hand, never invent a metric value or a profile value,
 
 | Case | Behavior |
 |---|---|
-| Invalid decisions file or input | `questions.py` and `answer.py` exit 1 naming it. `remove-term` and `unset` still work on a file whose shape they can read. |
+| Invalid decisions file or input | `questions.py` and `answer.py` exit 1 naming it. `remove-term` still works on a `decisions/terms.json` that the checks reject, as long as it is a JSON list. |
 | A pointer that is not a fact field, an index past the end, a bad date, a denied term in a value | Rejected, file unchanged. |
 | A term decision that would make `terms.json` invalid or a replacement that holds a denied term | Rejected, file unchanged. |
 | A metric statement that does not state its value, an unknown project | Rejected, file unchanged. |

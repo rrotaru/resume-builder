@@ -45,10 +45,10 @@ skills/resume-sanitize/
     apply.py               # CLI: begin 07-sanitized and replace denied terms; --commit checks new-terms.json and commits
     rsanitize/
       common.py            # errors, workspace files, reading and validating inputs
-      texts.py             # the texts each half reads, with their places
+      texts.py             # the texts each half reads, with their places; where a term occurs
       detect.py            # likely terms: codename phrases, URLs, emails, money, capitalized names
-      replace.py           # replacing denied terms, capitals at a sentence start
-      terms.py             # checks of candidates.json and new-terms.json, found_in
+      replace.py           # replacing denied terms, capitals at a sentence start, prose in the profile
+      proposals.py         # checks of candidates.json and new-terms.json, found_in
       report.py            # what the scripts print
 ```
 
@@ -102,19 +102,28 @@ Evidence in no project is left out: resume-write cites a project's evidence and 
 | `url` | `http://` and `https://` URLs (shown without the scheme and trailing punctuation), `www.` hosts, and hosts ending in `.internal`, `.corp`, `.local`, `.lan` or `.intranet` |
 | `email` | Email addresses |
 | `money` | A currency sign or code with a number: `$1.2M`, `€300k`, `2 million USD` |
-| `name` | A run of one to four capitalized words, separated by single spaces, that does not overlap one of the above. A single word at the [start of a sentence](#sentence-start) does not count. Words of two or three capital letters (`PR`, `API`), a word followed by `-<digits>` (the `PAY` of `PAY-42`) and `I` end a run. |
+| `name` | A run of one to four capitalized words, separated by single spaces, that does not overlap one of the above. Words of two or three capital letters (`PR`, `API`), a word followed by `-<digits>` (the `PAY` of `PAY-42`) and `I` end a run, and leading function words (`The`, `For`) are dropped. At the [start of a sentence](#sentence-start) the position may be what capitalizes the first word, so a run there also counts without it (`Fix Falcon cache` gives `Fix Falcon` and `Falcon`), and a single word there does not count. |
+
+Names are looked for only in prose of the profile, not in its fact fields: those hold the engineer's own titles, employers and schools, which are rarely confidential and would drown the list. The other kinds are looked for everywhere.
 
 Hits are grouped by term (the terms check's normalized words, so `Contoso Bank` and `contoso-bank` are one term), keeping the first spelling seen. The scan prints only terms `decisions/terms.json` does not decide, grouped by kind in the table's order, most places first:
+
+For the fixture before any term is decided except the allowed `Go`:
 
 ```
 scanned: 1 project, 3 evidence items in projects, 1 performance review, 03-profile/profile.json
  1. pj_da2a2b53  Project Falcon checkout latency
     Idempotency cache that cut checkout latency for Contoso Bank.
     reasons: authored the core PR and owned the epic; customer-facing latency impact
-likely terms not in decisions/terms.json: 3
+likely terms not in decisions/terms.json: 7
   codename  'Project Falcon'  3 places: pj_da2a2b53, ev_99a74656, ev_191cc8ce
+  url       'github.com/jrivera'  1 place: resume:/basics/profiles/0/url
+  url       'github.com/jrivera/ledger-lint'  1 place: resume:/projects/0/url
   name      'Contoso Bank'  3 places: pj_da2a2b53, ev_99a74656, ev_191cc8ce
+  name      'Add Redis'  1 place: ev_191cc8ce
+  name      'GitHub'  1 place: resume:/projects/0/description
   name      'Redis'  1 place: ev_191cc8ce
+1 likely term decided in decisions/terms.json already
 began 05-terms.tmp/: write 05-terms.tmp/candidates.json, then run scan.py --commit
 ```
 
@@ -134,7 +143,7 @@ A candidate is a name the engineer may not be allowed to publish: an internal co
 `scan.py --commit` stops with one line per problem and a `fix:` line when:
 
 - `candidates.json` is missing, not JSON, or does not match the schema with `found_in` optional;
-- a term appears in none of the texts (matched by the terms check's rules, with the allowed terms in `decisions/terms.json` exempting as they do there);
+- a term appears in none of the texts (matched by the terms check's rules, with the allowed terms in `decisions/terms.json` exempting as they do there, except an allowed decision for the term itself);
 - two candidates are the same term (the same normalized words);
 - a `proposed_replacement` is empty, or contains a candidate term or a denied term.
 
@@ -142,10 +151,11 @@ A candidate is a name the engineer may not be allowed to publish: an internal co
 05-terms.tmp/candidates.json: /2/term: 'Falcon Pay' appears in none of the scanned texts
 05-terms.tmp/candidates.json: /3/term: 'contoso bank' is the same term as /1 ('Contoso Bank')
 05-terms.tmp/candidates.json: /0/proposed_replacement: 'Falcon-based platform' contains the term 'Falcon' (/4)
+05-terms.tmp/candidates.json: /5/proposed_replacement: 'the Tailspin client' contains the term 'Tailspin' (decisions/terms.json)
   fix: list each term once, spelled as the scanned text spells it, with a non-empty generalization that contains no candidate or denied term
 ```
 
-It prints a `note:` for a candidate `decisions/terms.json` already decides: the wizard does not ask about it again. Then it writes `found_in` (places in text order, each once) and commits. The file keeps the model's order.
+It prints a `note:` for a candidate `decisions/terms.json` already decides: the wizard does not ask about it again. Then it writes `found_in` (places in text order, each once) and commits. The file keeps the model's order. The last lines list each candidate with its places and whether the wizard will ask about it, then `committed 05-terms: 2 candidates (0 to decide in the wizard)`.
 
 ## Apply
 
@@ -154,7 +164,7 @@ It prints a `note:` for a candidate `decisions/terms.json` already decides: the 
 1. `apply.py` reads and validates `06-bullets/bullets.json`, `06-bullets/stories.md`, `decisions/terms.json`, and when they exist `03-profile/profile.json`, `decisions/profile.json` and `05-terms/candidates.json`.
 2. It stops if `decisions/terms.json` is unusable: missing or invalid (as in the terms check), a denied term listed twice with different replacements, or a replacement that contains a denied term (`rcore.terms.replacement_conflicts`).
 3. It [replaces](#replacing) every denied match in each bullet's `text`, in `stories.md` as a whole, and in the profile's [prose](#prose-and-facts). Other bullet fields are copied unchanged.
-4. It runs the terms check on the result: every bullet `text`, `stories.md`, and the profile's prose. A match left over (possible only for exotic Unicode that the normalization maps differently in pieces) stops it, and nothing is begun.
+4. It runs the terms check on the result: every bullet `text`, `stories.md`, and the profile's prose. A match left over stops it, and nothing is begun: `b_1: contains denylisted term '…' after replacing` and a `fix:` line. This can happen only for text whose pieces normalize differently from the whole, such as conjoining Hangul jamo that NFKC composes only across pieces.
 5. It begins `07-sanitized` and writes `bullets.json`, `profile.json` and `stories.md`, then prints what changed, a `warning:` for each [fact field that holds a denied term](#fact-fields-with-denied-terms), the allowed-term notices, and the [likely new terms](#new-terms).
 6. The model reads the sanitized bullets and stories in full and writes `07-sanitized.tmp/new-terms.json`.
 7. `apply.py --commit` repeats steps 1 to 4, stops if the result differs from the files in `07-sanitized.tmp/` (`inputs changed since apply.py ran; run apply.py again and review the new text`), checks `new-terms.json`, writes it with `found_in`, and commits `07-sanitized` with inputs `06-bullets/bullets.json`, `06-bullets/stories.md`, `decisions/terms.json` and, when they exist, `03-profile/profile.json` and `05-terms/candidates.json`, and `extra` `{"bullets": 4, "changed_bullets": 1, "replacements": 4, "new_terms": 0}`.
@@ -171,12 +181,12 @@ Each match, including a plural ending and any separators or invisible characters
 
 A position is at the start of a sentence when either:
 
-- the text of its line before it, ignoring spaces and the Markdown markers `#`, `>`, `-`, `+`, `*`, `•`, `_`, quotes and opening brackets, is empty or a list number such as `1.`;
-- or the text before it, ignoring the same characters at its end, ends with `.`, `!`, `?` or `:`.
+- the text of its line before it, ignoring spaces and the Markdown markers `#`, `>`, `-`, `+`, `*`, `•`, `_`, backticks, quotes and opening brackets, is a list number such as `1.`; or it is empty and the line has a marker (`## `, `- `), is the first line, or follows a blank line;
+- or the text before it, ignoring the same characters and line breaks at its end, is empty or ends with `.`, `!`, `?` or `:`.
 
-So `## Project Falcon checkout latency` becomes `## Real-time fraud-detection platform checkout latency`, and `- **Task:** Contoso Bank asked` becomes `- **Task:** A top-10 US bank asked`, while `for Contoso Bank` becomes `for a top-10 US bank`. The same rule decides which single capitalized words the `name` detector skips.
+So `## Project Falcon checkout latency` becomes `## Real-time fraud-detection platform checkout latency`, and `- **Task:** Contoso Bank asked` becomes `- **Task:** A top-10 US bank asked`, while `for Contoso Bank` becomes `for a top-10 US bank`, also when a wrapped line breaks between `for` and the term. The same rule decides where the `name` detector treats a first word as capitalized by position.
 
-For the fixture, `b_1` `Cut p99 checkout latency 40% for Contoso Bank by building a Redis-backed idempotency cache for Project Falcon in Go` becomes `Cut p99 checkout latency 40% for a top-10 US bank by building a Redis-backed idempotency cache for a real-time fraud-detection platform in Go`.
+For the fixture, `b_1` `Cut p99 checkout latency 40% for Contoso Bank by building a Redis-backed idempotency cache for Project Falcon in Go` becomes `Cut p99 checkout latency 40% for a top-10 US bank by building a Redis-backed idempotency cache for real-time fraud-detection platform in Go`. Resume bullets often drop articles, so the replacement reads as the engineer's decision wrote it.
 
 Mechanical replacement can read awkwardly, for example `the a top-10 US bank team`. The engineer sees every changed text at checkpoint 4 and fixes it by rewording the replacement in the wizard or the bullet in resume-write, never by editing `07-sanitized/`.
 
@@ -204,26 +214,33 @@ Warnings never block: the render gate fails on such a field only if a tailored r
 
 The model then reads every sanitized bullet and the whole of `stories.md`, and writes `07-sanitized.tmp/new-terms.json` in the candidates' form, `[]` when there is nothing new. `apply.py --commit` checks it like candidates, against the sanitized text, and also stops when:
 
-- a term is decided in `decisions/terms.json` already (`'Contoso Bank' is decided in decisions/terms.json; leave it out`);
+- a term is decided in `decisions/terms.json` already (`/0/term: 'Contoso Bank' is decided in decisions/terms.json; leave it out`);
 - an undecided candidate from `05-terms/candidates.json` appears in the sanitized text but is not listed (`'Fabrikam' from 05-terms/candidates.json is not decided and appears in b_2; list it`).
 
 `found_in` for new terms uses `b_…`, `stories.md:<line>` and `resume:<pointer>` (the same pointer in `07-sanitized/profile.json` and `03-profile/profile.json`). Checkpoint 4 shows the new terms. The engineer decides each in the wizard, which asks about `07-sanitized/new-terms.json` as well, and apply runs again.
 
 ### What apply.py prints
 
+For the fixture:
+
 ```
-replaced 4 matches: 'Project Falcon' 2, 'Contoso Bank' 2
+replaced 5 matches: 'Project Falcon' 3, 'Contoso Bank' 2
 06-bullets/bullets.json: 1 of 4 bullets changed
-  b_1: Cut p99 checkout latency 40% for a top-10 US bank by building a Redis-backed idempotency cache for a real-time fraud-detection platform in Go
+  b_1: Cut p99 checkout latency 40% for a top-10 US bank by building a Redis-backed idempotency cache for real-time fraud-detection platform in Go
 06-bullets/stories.md: 3 lines changed
-  1: ## Real-time fraud-detection platform checkout latency
-  3: - **Situation:** Checkout for a top-10 US bank missed its p99 latency target at peak traffic.
-  4: - **Task:** Jordan led the fix for the real-time fraud-detection platform checkout path.
+  3: ## Real-time fraud-detection platform checkout latency
+  5: - **Situation:** Checkout for a top-10 US bank missed its p99 latency target at peak traffic.
+  6: - **Task:** Jordan led the fix for the real-time fraud-detection platform checkout path.
 03-profile/profile.json: 0 prose fields changed
-likely new terms not in decisions/terms.json: 1
-  name  'Redis'  2 places: b_1, stories.md:5
+likely new terms not in decisions/terms.json: 4
+  url       'github.com/jrivera'  1 place: resume:/basics/profiles/0/url
+  url       'github.com/jrivera/ledger-lint'  1 place: resume:/projects/0/url
+  name      'GitHub'  2 places: b_4, resume:/projects/0/description
+  name      'Redis'  2 places: b_1, stories.md:7
 began 07-sanitized.tmp/: read the sanitized bullets and stories, write 07-sanitized.tmp/new-terms.json, then run apply.py --commit
 ```
+
+Warnings and `notice:` lines come after the changes. An undecided candidate prints as `  must list  'Fabrikam' (a 05-terms/candidates.json candidate not yet decided)  2 places: b_2, stories.md:5`. With `--commit`, the last line is `committed 07-sanitized: 1 of 4 bullets changed, 5 replacements, 0 new terms`.
 
 ## `07-sanitized/` contents
 
@@ -260,12 +277,13 @@ Never edit `decisions/`, `06-bullets/` or `07-sanitized/` by hand, and never wea
 
 1. `rcore/terms.py` gains:
    - `find(text, patterns)`: denied matches as `(start, end, term)` spans of the original text, allowed terms exempting, overlaps resolved leftmost-longest.
+   - `terms_in(text, patterns)`: the denied terms the check finds in one string.
    - `key(term)`: the normalized words of a term, for comparing terms.
    - `read_entries(workspace)`: the validated `decisions/terms.json` entries, or the errors the check would print.
    - `replacement_conflicts(entries)`: one line for each replacement that contains a denied term.
 2. `rcore/profile.py` gains the JSON Resume vocabulary resume-import's check used (`BASICS`, `LOCATION`, `PROFILE_ITEM`, `SECTIONS`, `ARRAY_FIELDS`, `DATE_FIELDS`), `PROSE_FIELDS`, and the entry identities that re-import warnings compare (`IDENTITY`, `identity`, `describe`, `merged_arrays`). resume-import imports them from there. See the [resume-wizard spec](2026-09-25-resume-wizard-design.md) for the rest of its changes.
 3. `rcore/facts.py` gains `fact_values(profile)`: `(pointer, value)` for each fact field of a profile that a tailored resume may copy, derived from `tailored-resume.schema.json`.
-4. Fixture: `05-terms/candidates.json` gains `found_in` as `scan.py --commit` computes it, and `07-sanitized/new-terms.json` is `[]`. From the fixture's projects, evidence and profile, with its candidates as the draft, `scan.py --commit` writes the saved `candidates.json` byte for byte. From the fixture's bullets, stories, profile and terms, `apply.py --commit` writes the saved `07-sanitized/` files byte for byte.
+4. Fixture: `05-terms/candidates.json` gains `found_in` as `scan.py --commit` computes it, `07-sanitized/new-terms.json` is `[]`, and `07-sanitized/bullets.json` `b_1` is the mechanical replacement (it had an article the replacement does not write). From the fixture's projects, evidence and profile, with its candidates as the draft, `scan.py --commit` writes the saved `candidates.json` byte for byte. From the fixture's bullets, stories, profile and terms, `apply.py --commit` writes the saved `07-sanitized/` files byte for byte.
 5. `pytest.ini` adds `skills/resume-sanitize/scripts` to `pythonpath`. The test command and CI do not change: sanitize uses only the standard library.
 6. The architecture spec: the plugin layout lists `scan.py` and `apply.py`; the resume-sanitize section points here and states the texts scanned, the replacement rule, prose and facts, new terms and the stage inputs.
 
@@ -286,7 +304,7 @@ Never edit `decisions/`, `06-bullets/` or `07-sanitized/` by hand, and never wea
 
 ## Testing
 
-- **Detectors:** each kind on made-up text, the sentence-start rule for single names, two- and three-letter capitals, Jira keys, overlapping hits, grouping by normalized term.
+- **Detectors:** each kind on made-up text, the sentence-start rule for names (a single word skipped, a run also counted without its first word), two- and three-letter capitals, Jira keys, function words, overlapping hits, grouping by normalized term.
 - **Texts:** project fields, only project evidence and reviews, a review's full text from `01-raw/`, a missing raw record (warning, excerpt used), every profile string with its pointer.
 - **find and replace:** separators, invisible characters and plurals replaced whole; an allowed term exempting a match; `Contoso` and `Contoso Bank` overlapping; capitals at a text start, after `.` and `:`, after Markdown markers, never mid-sentence; a replacement never lowercased; the exact fixture bullet and stories.
 - **Prose and facts:** only prose fields change; fact fields and `x-lines` stay byte for byte.

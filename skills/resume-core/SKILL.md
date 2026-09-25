@@ -18,13 +18,13 @@ Run every script with `uv run`. Each one takes `--workspace` (default `resume-wo
 
 ```
 resume-workspace/
-  config.json      decisions/ (terms, projects, metrics, profile, attestations)
+  config.json      decisions/ (terms, projects, metrics, profile, attestations, wizard)
   01-raw/  02-evidence/  03-profile/  04-projects/  05-terms/
   06-bullets/  07-sanitized/  08-ats/  out/
 ```
 
 - Each numbered folder is a **stage**, written by exactly one skill.
-- `decisions/` holds the engineer's choices. Only the wizard and checkpoints write to it; regenerating a stage never touches it.
+- `decisions/` holds the engineer's choices. Only the wizard and checkpoints write to it; regenerating a stage never touches it. `decisions/wizard.json` is the wizard's own bookkeeping (which imported entry each profile answer was given for, and skipped questions); no stage reads it.
 - Never edit another skill's stage folder.
 
 ## Writing a stage
@@ -78,7 +78,9 @@ A tailored resume's fact fields must match it:
 - Each entry in `work`, `projects`, `education`, `certificates` and `skills` matches one profile entry of the same section: every fact field it has, that entry has with the same value (exact text); `keywords` holds only that entry's keywords, in any order; other fields may be left out.
 - A date may be shortened (`2023-01-15` as `2023-01` or `2023`), never lengthened, and an entry has a date field exactly when its profile entry does, so a past job cannot lose its `endDate`.
 
-A confidential term in a fact field (for example a codename used as a project name) is fixed with a wizard answer at that path in `decisions/profile.json`, never by rewording the tailored resume.
+A confidential term in a fact field (for example a codename used as a project name) is fixed with a wizard answer at that path in `decisions/profile.json`, never by rewording the tailored resume. A keyword cannot be replaced that way (keywords combine), so a keyword holding a denied term is left out of the tailored resume.
+
+Only resume-wizard's `answer.py` writes `decisions/profile.json`, `decisions/terms.json` and `decisions/metrics.json`. It writes profile answers under the rules above (facts only, `{}` padding, an index at most one past the end) and anchors each one to the imported entry it was given for, so a re-import that moves the entry becomes a wizard question.
 
 ## Checks
 
@@ -116,6 +118,12 @@ from rcore import ids, stages, wsio  # noqa: E402
 `ids.text_sha256(text)`, `config.metric_prompt_count(n, percent, minimum, maximum)`,
 `config.resolve_path(workspace, value)` (a relative path in `config.json` is relative to the workspace),
 `profile.effective_profile(workspace)`, `profile.overlay(imported, wizard)`,
+`profile.SECTIONS` and the other JSON Resume field lists, `profile.PROSE_FIELDS` (`summary`, `description`, `highlights`, `reference`),
+`profile.identity(section, entry)` / `describe` / `merged_arrays(doc)` (which entry an array item is), `profile.is_date(value)`,
+`facts.fact_values(profile)` (the fact fields a tailored resume may copy, as pointer and value),
+`terms.find(text, patterns)` (denied matches as spans of the original text), `terms.terms_in(text, patterns)`,
+`terms.key(term)` (two spellings of one term share a key), `terms.read_entries(workspace)`,
+`terms.replacement_conflicts(entries)` (a replacement that holds a denied term),
 `wsio.read_json / write_json / read_jsonl / write_jsonl / resolve_pointer`,
 `documents.extract(data, fmt, name)` (the normalized text of a PDF, DOCX, TXT or Markdown file's bytes).
 
