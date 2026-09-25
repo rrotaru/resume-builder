@@ -189,6 +189,13 @@ JSON Resume restricted to a closed list of sections, validated by `tailored-resu
 - Each `work` and `projects` entry has an `x-highlights` array of `{bullet_id, text, sources}` (it may be empty), and `highlights` holds the same texts in the same order (JSON Resume highlights are plain strings, so the sourcing lives alongside them).
 - `education`, `certificates` and `skills` entries carry no `highlights`.
 - If `basics.summary` is present, `basics.x-summary-sources` must be present and non-empty; the source check treats the summary as a bullet with id `summary`.
+- Every object is closed to an allowlist of fields (`additionalProperties: false`), so no unsourced claim can ride along in a field the checks do not read:
+  - `basics`: `name`, `label`, `email`, `phone`, `url`, `location`, `profiles`, `summary`, `x-summary-sources`, `x-sources`; `location`: `address`, `postalCode`, `city`, `countryCode`, `region`; each `profiles` item: `network`, `username`, `url`.
+  - `work` and `projects` entries: `name`, `position`, `url`, `location`, `startDate`, `endDate`, `highlights`, `x-highlights`, `x-sources`. There is no `summary` or `description`: claims belong in sourced highlights.
+  - `education` entries: `institution`, `url`, `area`, `studyType`, `startDate`, `endDate`, `score`, `x-sources`.
+  - `certificates` entries: `name`, `date`, `issuer`, `url`, `x-sources`.
+  - `skills` entries: `name`, `level`, `keywords`, `x-sources`.
+- `basics.label`, when present, must equal `config.json` `target_role` or `03-profile/profile.json` `basics.label`. The source check enforces this for tailored resumes and reports `<file>: basics.label must match the target role in config.json or the imported profile's label`.
 
 This is the only input to rendering. `report.json` holds ATS lint results and keyword coverage.
 

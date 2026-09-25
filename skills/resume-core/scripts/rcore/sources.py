@@ -4,7 +4,9 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from . import wsio
+from . import validation, wsio
+
+LABEL_ERROR = "basics.label must match the target role in config.json or the imported profile's label"
 
 
 @dataclass
@@ -13,6 +15,7 @@ class KnownSources:
     metric_ids: set[str] = field(default_factory=set)
     profile: dict = field(default_factory=dict)
     wizard: dict = field(default_factory=dict)
+    target_role: str | None = None  # config.json target_role
     errors: list[str] = field(default_factory=list)  # files present but unreadable
 
 
@@ -45,7 +48,20 @@ def load_known(workspace: Path) -> KnownSources:
     known.profile = profile if isinstance(profile, dict) else {}
     wizard = read("decisions/profile.json")
     known.wizard = wizard if isinstance(wizard, dict) else {}
+    config = read("config.json")
+    role = config.get("target_role") if isinstance(config, dict) else None
+    known.target_role = role if isinstance(role, str) else None
     return known
+
+
+def _allowed_labels(known: KnownSources) -> set[str]:
+    basics = known.profile.get("basics")
+    labels = {known.target_role, basics.get("label") if isinstance(basics, dict) else None}
+    return {label for label in labels if isinstance(label, str)}
+
+
+def _is_tailored(rel: str) -> bool:
+    return validation.schema_for(rel) == ("tailored-resume", "json")
 
 
 def _pointer_error(doc: dict, pointer: str, filename: str) -> str | None:
@@ -86,7 +102,8 @@ def check_bullets(bullets: list[dict], known: KnownSources, label: str) -> list[
     return errors
 
 
-def check_resume(resume: dict, known: KnownSources, label: str) -> list[str]:
+def check_resume(resume: dict, known: KnownSources, label: str,
+                 tailored: bool | None = None) -> list[str]:
     """Check a resume document.
 
     - In work and projects, highlights must equal the x-highlights texts, in order.
@@ -94,7 +111,12 @@ def check_resume(resume: dict, known: KnownSources, label: str) -> list[str]:
       (they would render with no sources).
     - Each x-highlight, and basics.summary if present (as bullet "summary",
       citing basics.x-summary-sources), must cite sources that resolve.
+    - In a tailored resume, basics.label (if present) must equal config.json
+      target_role or 03-profile/profile.json basics.label. tailored defaults
+      to whether label is a tailored resume path (08-ats/.../resume.json).
     """
+    if tailored is None:
+        tailored = _is_tailored(label)
     errors = []
     for section in ("work", "projects"):
         for i, entry in enumerate(resume.get(section, [])):
@@ -107,6 +129,10 @@ def check_resume(resume: dict, known: KnownSources, label: str) -> list[str]:
                 errors.append(f"{label}: /{section}/{i}: highlights are only allowed in work and projects")
     bullets = []
     basics = resume.get("basics", {})
+    if tailored and isinstance(basics, dict) and "label" in basics:
+        value = basics["label"]
+        if not isinstance(value, str) or value not in _allowed_labels(known):
+            errors.append(f"{label}: {LABEL_ERROR}")
     if isinstance(basics, dict) and "summary" in basics:
         bullets.append({"id": "summary", "sources": basics.get("x-summary-sources")})
     bullets += [

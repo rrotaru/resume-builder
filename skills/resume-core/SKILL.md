@@ -57,7 +57,7 @@ A `resume:` or `wizard:` pointer must start with `/` and point to a single strin
 
 ## Tailored resumes and job flags
 
-- `08-ats/general/resume.json` and `08-ats/jobs/<slug>/resume.json` follow `schemas/tailored-resume.schema.json`. Only the sections `basics`, `work`, `projects`, `education`, `certificates` and `skills` are allowed. Every `work` and `projects` entry has `x-highlights` (`{bullet_id, text, sources}`, possibly empty) and `highlights` holding the same texts in order. Other sections carry no `highlights`. A `basics.summary` needs a non-empty `basics.x-summary-sources`.
+- `08-ats/general/resume.json` and `08-ats/jobs/<slug>/resume.json` follow `schemas/tailored-resume.schema.json`. Only the sections `basics`, `work`, `projects`, `education`, `certificates` and `skills` are allowed. Every `work` and `projects` entry has `x-highlights` (`{bullet_id, text, sources}`, possibly empty) and `highlights` holding the same texts in order. Other sections carry no `highlights`. A `basics.summary` needs a non-empty `basics.x-summary-sources`. Every object accepts only the fields listed in the schema: `work` and `projects` entries have no `summary` or `description` (claims go in sourced highlights). `basics.label`, if present, must equal `config.json` `target_role` or the imported profile's `basics.label`.
 - `08-ats/jobs/<slug>/flags.json` is `{"checked": {"<bullet_id>": "<text_sha256>"}, "flags": [...]}`. The claim diff records in `checked` the hash of every bullet it examined, flagged or not, and lists unsupported claims in `flags`.
 
 ## Checks
@@ -65,7 +65,7 @@ A `resume:` or `wizard:` pointer must start with `/` and point to a single strin
 | Script | Fails when |
 |---|---|
 | `validate.py [PATH ...]` | a file does not match its schema in `schemas/`, or an array has duplicate `id`s |
-| `check_sources.py FILE ...` | a bullet (or a resume's `summary`) has no sources or cites one that does not resolve; a resume's `highlights` differ from its `x-highlights` texts; `education`, `certificates` or `skills` carry `highlights` |
+| `check_sources.py FILE ...` | a bullet (or a resume's `summary`) has no sources or cites one that does not resolve; a resume's `highlights` differ from its `x-highlights` texts; `education`, `certificates` or `skills` carry `highlights`; a tailored resume's `basics.label` is neither the target role nor the imported profile's label |
 | `check_terms.py FILE ...` | text contains a term from `decisions/terms.json` whose `replacement` is not null, or `decisions/terms.json` is missing or invalid |
 | `check_flags.py JOB ...` | a bullet in `08-ats/jobs/<JOB>/resume.json` is flagged with no matching attestation, or changed after the claim diff, or a flag names a bullet that is gone |
 

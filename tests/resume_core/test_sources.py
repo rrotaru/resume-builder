@@ -156,3 +156,48 @@ def test_project_highlights_must_match_x_highlights(workspace):
     assert sources.check_file(workspace, TAILORED[0]) == [
         "08-ats/general/resume.json: /projects/0: highlights do not match x-highlights"
     ]
+
+
+JOB = "08-ats/jobs/fintech-sre/resume.json"
+LABEL_ERROR = "basics.label must match the target role in config.json or the imported profile's label"
+
+
+def _edit_job(workspace, change):
+    path = workspace / JOB
+    resume = wsio.read_json(path)
+    change(resume)
+    wsio.write_json(path, resume)
+
+
+def test_load_known_reads_target_role(workspace):
+    assert sources.load_known(workspace).target_role == "Senior Backend Engineer"
+
+
+def test_tailored_label_must_match_target_role_or_profile(workspace):
+    _edit_job(workspace, lambda r: r["basics"].update(label="CTO"))
+    assert sources.check_file(workspace, JOB) == [f"{JOB}: {LABEL_ERROR}"]
+    _edit_job(workspace, lambda r: r["basics"].update(label="Backend Engineer"))  # profile label
+    assert sources.check_file(workspace, JOB) == []
+    _edit_job(workspace, lambda r: r["basics"].pop("label"))
+    assert sources.check_file(workspace, JOB) == []
+
+
+def test_label_check_applies_only_to_tailored_resumes(workspace):
+    known = sources.load_known(workspace)
+    resume = {"basics": {"label": "CTO"}}
+    assert sources.check_resume(resume, known, "03-profile/profile.json") == []
+    assert sources.check_resume(resume, known, "08-ats.tmp/general/resume.json") == [
+        f"08-ats.tmp/general/resume.json: {LABEL_ERROR}"
+    ]
+    assert sources.check_resume(resume, known, "x", tailored=True) == [f"x: {LABEL_ERROR}"]
+    assert sources.check_resume({"basics": {"label": ["CTO"]}}, known, "x", tailored=True) == [
+        f"x: {LABEL_ERROR}"
+    ]
+
+
+def test_label_check_without_config_or_profile_fails(tmp_path):
+    known = sources.load_known(tmp_path)
+    assert known.target_role is None
+    assert sources.check_resume({"basics": {"label": "CTO"}}, known, "x", tailored=True) == [
+        f"x: {LABEL_ERROR}"
+    ]
