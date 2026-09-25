@@ -6,14 +6,16 @@
   own x-lines or x-highlights.
 - Values that are "" or null are dropped (templates use them for "no value").
 - Dates (startDate, endDate, date, releaseDate) must be YYYY, YYYY-MM or
-  YYYY-MM-DD naming a real date. A timestamp is cut to its date. Anything else
-  is an error: a date is never dropped, because a job without its endDate
-  would render as current.
+  YYYY-MM-DD naming a real date. A valid ISO 8601 timestamp
+  (2019-06-01T09:30:00Z) is cut to its date. Anything else, including a
+  date followed by a malformed time, is an error: a date is never dropped,
+  because a job without its endDate would render as current.
 - Order, other sections and unknown fields are kept. The result must match
   resume.schema.json.
 """
 from __future__ import annotations
 
+import datetime
 import json
 import re
 
@@ -23,7 +25,22 @@ from .dates import is_iso_date
 
 DATE_KEYS = frozenset({"startDate", "endDate", "date", "releaseDate"})
 DROPPED_TOP_LEVEL = ("$schema", "meta")
-_TIMESTAMP = re.compile(r"(\d{4}-\d{2}-\d{2})T.*")
+# An ISO 8601 timestamp: date, "T", hh:mm[:ss[.fraction]], then an optional Z or offset.
+_TIMESTAMP = re.compile(r"(?P<date>\d{4}-\d{2}-\d{2})T(?P<h>\d{2}):(?P<m>\d{2})(?::(?P<s>\d{2})(?:\.\d+)?)?"
+                        r"(?:Z|[+-](?P<oh>\d{2}):?(?P<om>\d{2}))?")
+
+
+def _timestamp_date(value: str) -> str | None:
+    """The date of a valid ISO 8601 timestamp, or None."""
+    match = _TIMESTAMP.fullmatch(value)
+    if not match or not is_iso_date(match.group("date")):
+        return None
+    try:
+        datetime.time(int(match.group("h")), int(match.group("m")), int(match.group("s") or 0))
+        datetime.time(int(match.group("oh") or 0), int(match.group("om") or 0))
+    except ValueError:
+        return None
+    return match.group("date")
 
 
 def _escape(key: str) -> str:
@@ -38,11 +55,11 @@ class _Loader:
 
     def date(self, value, pointer: str):
         if isinstance(value, str):
-            timestamp = _TIMESTAMP.fullmatch(value)
-            if timestamp and is_iso_date(timestamp.group(1)):
-                return timestamp.group(1)
             if is_iso_date(value):
                 return value
+            date = _timestamp_date(value)
+            if date:
+                return date
         self.errors.append(f"{pointer}: date {value!r} is not YYYY, YYYY-MM or YYYY-MM-DD; fix it in the file")
         return value
 

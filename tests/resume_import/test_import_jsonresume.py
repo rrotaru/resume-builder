@@ -1,6 +1,7 @@
 """Loading a JSON Resume file (rimport.jsonresume)."""
 import json
 
+import pytest
 from rimport import jsonresume
 
 
@@ -42,9 +43,24 @@ def test_a_nested_meta_is_not_file_metadata():
     assert profile == {"projects": [{"name": "x", "meta": "kept"}]} and notes == []
 
 
-def test_timestamps_are_cut_to_their_date():
-    profile, _, errors = load({"work": [{"startDate": "2019-06-01T00:00:00.000Z", "endDate": "2022-12"}]})
+@pytest.mark.parametrize("value", [
+    "2019-06-01T00:00:00.000Z", "2019-06-01T09:30Z", "2019-06-01T09:30:15", "2019-06-01T23:59:59.123456+02:00",
+    "2019-06-01T09:30:15-0500",
+])
+def test_timestamps_are_cut_to_their_date(value):
+    profile, _, errors = load({"work": [{"startDate": value, "endDate": "2022-12"}]})
     assert errors == [] and profile["work"][0] == {"startDate": "2019-06-01", "endDate": "2022-12"}
+
+
+@pytest.mark.parametrize("value", [
+    "2024-01-01T", "2024-01-01Tgarbage", "2024-01-01T25:99:99Z", "2024-01-01T12", "2024-01-01T12:60",
+    "2024-01-01T12:30:61", "2024-01-01T12:30:00+25:00", "2024-01-01T12:30:00ZZ", "2024-02-30T00:00:00Z",
+    "2024-01-01 12:30:00",
+])
+def test_malformed_timestamps_are_errors(value):
+    profile, _, errors = load({"work": [{"startDate": value}]})
+    assert profile is None
+    assert errors == [f"/work/0/startDate: date {value!r} is not YYYY, YYYY-MM or YYYY-MM-DD; fix it in the file"]
 
 
 def test_other_dates_are_errors_never_dropped():
