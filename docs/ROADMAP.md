@@ -24,9 +24,9 @@ Short names used below:
 - **Skill layout:** a skill lives in `skills/<name>/` and may hold only `SKILL.md`, `scripts/`, `references/`, `templates/` and `schemas/`. It may use `../resume-core/` and nothing else outside its folder. See Arch "Portability rules". `tests/test_skill_lint.py` enforces this.
 - **Scripts:** every script runs with `uv run` and starts with a PEP 723 header with `requires-python = ">=3.10"`. Check and normalization scripts use only the standard library. Other scripts import `rcore` from `../resume-core/scripts/`.
 - **Stages:** write a stage only through `stage.py begin` and `stage.py commit` (see Core "Writing a stage"). Each numbered folder has exactly one writer. Only the wizard and the checkpoints write `decisions/`.
-- **Schemas:** every workspace file has a schema in `skills/resume-core/schemas/`, mapped by path in `FILE_SCHEMAS` (`rcore/validation.py`). A new file needs both, except `01-raw/`, which has no schema by design.
+- **Schemas:** every JSON or JSONL workspace file has a schema in `skills/resume-core/schemas/`, mapped by path in `FILE_SCHEMAS` (`rcore/validation.py`). A new JSON or JSONL file needs both. Text files (`stories.md`, `jd.txt`) and `01-raw/` have no schema by design; the validator reads only JSON and JSONL.
 - **Fixtures:** [`tests/fixtures/workspace/`](../tests/fixtures/workspace/) holds a made-up engineer's saved output for most stages. A new skill's output must stay valid input for the next stage, and in CI the saved output stands in for model-driven steps.
-- **Tests:** run `uv run --with pytest --with-requirements skills/resume-render/scripts/render.py pytest`, and run `render.py --install-browser` once first. CI runs Python 3.10 and 3.13.
+- **Tests:** from the repository root, run `uv run skills/resume-render/scripts/render.py --install-browser` once, then `uv run --with pytest --with-requirements skills/resume-render/scripts/render.py pytest`. CI runs Python 3.10 and 3.13.
 - **Reviews:** a Codex bot reviews each PR. Verify every finding before acting, since some are wrong. Never weaken or skip a check to get green.
 
 ## Checklist
