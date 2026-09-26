@@ -298,3 +298,28 @@ def test_profile_entry_lines_are_validated(workspace):
         "03-profile/profile.json: $.skills[0].x-lines: missing required property 'last'",
         "03-profile/profile.json: $.languages[0]: expected object, got str",
     ]
+
+
+def test_wizard_state_is_validated(workspace):
+    path = workspace / "decisions" / "wizard.json"
+    wsio.write_json(path, {"anchors": [{"entry": "/work/01", "answered_for": {"name": 3}}],
+                           "skipped": [{"question": "term:Falcon"}]})
+    assert validation.validate_paths(workspace, ["decisions/wizard.json"]) == [
+        "decisions/wizard.json: $.anchors[0].entry: '/work/01' does not match "
+        "^/(basics/profiles|[A-Za-z]+)/(0|[1-9][0-9]*)$",
+        "decisions/wizard.json: $.anchors[0].answered_for.name: expected string, got int",
+        "decisions/wizard.json: $.skipped[0].question: 'term:Falcon' does not match "
+        "^(profile:/.+|metric:pj_[0-9a-f]{8})$",
+    ]
+
+
+def test_metric_evidence_snapshot_is_optional_and_checked(workspace):
+    path = workspace / "decisions" / "metrics.json"
+    metrics = wsio.read_json(path)
+    del metrics[0]["evidence_ids"]
+    wsio.write_json(path, metrics)
+    assert validation.validate_paths(workspace, ["decisions/metrics.json"]) == []
+    metrics[0]["evidence_ids"] = ["PAY-42"]
+    wsio.write_json(path, metrics)
+    assert validation.validate_paths(workspace, ["decisions/metrics.json"]) == [
+        "decisions/metrics.json: $[0].evidence_ids[0]: 'PAY-42' does not match ^ev_[0-9a-f]{8}([0-9a-f]{4})?$"]

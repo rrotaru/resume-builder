@@ -12,6 +12,7 @@ EMPTY_DECISIONS = {
     "metrics.json": [],
     "profile.json": {},
     "attestations.json": [],
+    "wizard.json": {"anchors": [], "skipped": []},
 }
 
 NOT_EXCLUDED_WARNING = ("warning: workspace is inside a git repository but was not excluded; "

@@ -11,7 +11,12 @@
       "project_id": {"type": "string", "pattern": "^pj_[0-9a-f]{8}$"},
       "value": {"type": "number"},
       "unit": {"type": "string"},
-      "statement": {"type": "string", "minLength": 1}
+      "statement": {"type": "string", "minLength": 1},
+      "evidence_ids": {
+        "description": "The project's evidence IDs when the metric was recorded; used only to suggest a project for a metric whose project is gone.",
+        "type": "array",
+        "items": {"type": "string", "pattern": "^ev_[0-9a-f]{8}([0-9a-f]{4})?$"}
+      }
     }
   }
 }

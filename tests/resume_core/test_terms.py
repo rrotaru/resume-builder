@@ -293,3 +293,78 @@ def test_bullet_operator_is_a_separator():
     assert terms.scan_json({"a": "Led Project\u2219Falcon"}, PATTERNS, "x") == [
         "x:/a: contains denylisted term 'Project Falcon'"
     ]
+
+
+# Helpers for resume-sanitize and resume-wizard ------------------------------------
+
+def test_key_names_the_same_term_whatever_the_spelling():
+    assert terms.key("Contoso Bank") == terms.key("contoso-bank") == terms.key("CONTOSO  _Bank") == "contoso bank"
+    assert terms.key("ContosoBank") == "contosobank"
+
+
+def test_find_returns_spans_of_the_original_text():
+    patterns = terms.compile_terms(["Project Falcon", "Contoso"])
+    text = "Led Project​-Falcons for CONTOSO, then Contoso."
+    spans = terms.find(text, patterns)
+    assert [(text[s:e], term) for s, e, term in spans] == [
+        ("Project​-Falcons", "Project Falcon"), ("CONTOSO", "Contoso"), ("Contoso", "Contoso")]
+
+
+def test_find_keeps_the_leftmost_then_longest_match():
+    patterns = terms.compile_terms(["Contoso", "Contoso Bank", "Bank of Contoso"])
+    text = "Contoso Bank of Contoso"
+    assert [(text[s:e], term) for s, e, term in terms.find(text, patterns)] == [
+        ("Contoso Bank", "Contoso Bank"), ("Contoso", "Contoso")]
+
+
+def test_find_respects_allowed_terms_like_the_check():
+    patterns = terms.compile_terms(["Check Point"], ["checkpoint"])
+    assert terms.find("Added a checkpoint", patterns) == []
+    assert [term for _, _, term in terms.find("Worked at Check Point", patterns)] == ["Check Point"]
+
+
+def test_find_maps_accents_and_compatibility_characters_back():
+    patterns = terms.compile_terms(["Café Nova", "file"])
+    text = "At Café Nova we ship a ﬁle."
+    assert [text[s:e] for s, e, _ in terms.find(text, patterns)] == ["Café Nova", "ﬁle"]
+
+
+def test_terms_in_lists_each_term_once_in_denylist_order():
+    patterns = terms.compile_terms(["Falcon", "Contoso"])
+    assert terms.terms_in("Contoso and Falcon and Contoso", patterns) == ["Falcon", "Contoso"]
+    assert terms.terms_in("nothing here", patterns) == []
+
+
+def test_read_entries_fails_closed(workspace):
+    entries, errors = terms.read_entries(workspace)
+    assert errors == [] and [e["term"] for e in entries] == ["Project Falcon", "Contoso Bank", "Go"]
+    (workspace / "decisions" / "terms.json").unlink()
+    assert terms.read_entries(workspace) == ([], ["decisions/terms.json: not found; run init_workspace.py"])
+    (workspace / "decisions" / "terms.json").write_text(json.dumps(
+        [{"term": "Contoso", "replacement": "a bank", "kind": "customer"},
+         {"term": "Contoso Bank", "replacement": None, "kind": "customer"}]), encoding="utf-8")
+    assert terms.read_entries(workspace)[1] == [
+        "decisions/terms.json: allowed term 'Contoso Bank' contains denied term 'Contoso'; remove it or reword"]
+
+
+def test_replacement_conflicts_name_each_denied_term_in_a_replacement():
+    entries = [{"term": "Contoso", "replacement": "a bank", "kind": "customer"},
+               {"term": "Falcon", "replacement": "a Contoso-grade falcon tool", "kind": "codename"},
+               {"term": "checkpoint", "replacement": None, "kind": "other"},
+               {"term": "Check Point", "replacement": "a checkpoint vendor", "kind": "customer"}]
+    assert terms.replacement_conflicts(entries) == [
+        "decisions/terms.json: the replacement for 'Falcon' ('a Contoso-grade falcon tool') contains the denied "
+        "term 'Contoso'",
+        "decisions/terms.json: the replacement for 'Falcon' ('a Contoso-grade falcon tool') contains the denied "
+        "term 'Falcon'"]
+
+
+def test_find_maps_a_text_piece_by_piece_only_when_it_matches(monkeypatch):
+    # Mapping each character back is the slow part; the scan looks for every term in every text.
+    mapped = []
+    real = terms._normalized_pieces.__wrapped__
+    monkeypatch.setattr(terms, "_normalized_pieces", lambda text: mapped.append(text) or real(text))
+    patterns = terms.compile_terms(["Falcon"])
+    texts = [f"unrelated text number {n}" for n in range(500)] + ["shipped Falcon"]
+    assert [terms.find(text, patterns) for text in texts][-1] == [(8, 14, "Falcon")]
+    assert mapped == ["shipped Falcon"]

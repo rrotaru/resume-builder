@@ -41,7 +41,7 @@ resume-builder/
       schemas/               # JSON Schema per stage file and decisions file
       scripts/               # validate.py, stage.py, check_sources.py, check_terms.py,
                              # check_flags.py, init_workspace.py
-        rcore/               # shared library (ids, schema, stages, checks, documents); imports
+        rcore/               # shared library (ids, schema, stages, checks, profile, documents); imports
                              # only the standard library, and reads PDF/DOCX only when asked
     resume-init/
     resume-collect/
@@ -53,7 +53,9 @@ resume-builder/
     resume-analyze/
       scripts/               # signals.py, match_projects.py, decide.py
     resume-sanitize/
+      scripts/               # scan.py, apply.py
     resume-wizard/
+      scripts/               # questions.py, answer.py
     resume-write/
     resume-ats/
       scripts/               # ats_lint.py, keywords.py, diff_claims.py
@@ -90,6 +92,7 @@ resume-workspace/
     metrics.json
     profile.json
     attestations.json
+    wizard.json          # resume-wizard's bookkeeping: answer anchors, skipped questions
   01-raw/                # resume-collect: pages as fetched or loaded, one JSONL per source
   02-evidence/           # resume-collect: normalized evidence.jsonl
   03-profile/            # resume-import: profile.json (JSON Resume), resume.txt, source.json
@@ -110,7 +113,7 @@ resume-workspace/
 
 **Git authors.** `config.json` `git_authors` (optional, default `[]`) lists the emails or names the engineer commits under. resume-collect keeps a local commit only when its author matches one exactly, ignoring case.
 
-**Ownership.** Each numbered folder is written by exactly one skill. `resume-wizard` writes only to `decisions/`. Checkpoints write engineer choices to `decisions/`.
+**Ownership.** Each numbered folder is written by exactly one skill. `resume-wizard` writes only to `decisions/` (`profile.json`, `terms.json`, `metrics.json` and `wizard.json`, through its `answer.py`). Checkpoints write engineer choices to `decisions/`.
 
 **Stage metadata.** Every stage folder contains `_stage.json`:
 
@@ -185,11 +188,12 @@ All files are JSON or JSONL and validated against `resume-core/schemas`.
 
 | File | Record |
 |---|---|
-| `terms.json` | `{term, replacement \| null, kind: codename\|customer\|product\|url\|financial\|other}`. `null` means allowed as-is. |
+| `terms.json` | `{term, replacement \| null, kind: codename\|customer\|product\|url\|financial\|other}`. `null` means allowed as-is. Written by the wizard's `answer.py term`, which keeps the file valid and refuses a replacement that contains a denied term ([resume-wizard spec](2026-09-25-resume-wizard-design.md#terms)). |
 | `projects.json` | `{project_id, action: exclude\|merge\|split\|rename\|set_role\|set_scope\|set_rank, merge_with?, split_groups?, name?, summary?, role?, scope?, rank?, evidence_ids?}`, written only by `decide.py` at checkpoint 2 and applied in order ([resume-analyze spec](2026-09-25-resume-analyze-design.md#project-decisions)) |
-| `metrics.json` | `{id, project_id, value, unit, statement}` |
-| `profile.json` | JSON Resume fragments supplied by the wizard |
+| `metrics.json` | `{id, project_id, value, unit, statement, evidence_ids?}`. The statement states the value. `evidence_ids` is the project's evidence when the metric was recorded, used only to suggest a project when the metric's project is gone ([resume-wizard spec](2026-09-25-resume-wizard-design.md#metrics)). |
+| `profile.json` | JSON Resume fragments supplied by the wizard: facts only, written under the effective-profile rules ([resume-wizard spec](2026-09-25-resume-wizard-design.md#profile-answers)) |
 | `attestations.json` | `{job_slug, bullet_id, text_sha256, action: accept\|edit}` |
+| `wizard.json` | `{anchors: [{entry, answered_for}], skipped: [{question, answered_for?}]}`: which imported entry each profile answer inside an array was given for, and the questions the engineer declined. Read and written only by the wizard. No stage records it as an input. |
 
 An attestation applies only while the bullet's text hash matches, so any later edit to the bullet invalidates it.
 
@@ -245,14 +249,15 @@ Detailed in the [resume-analyze spec](2026-09-25-resume-analyze-design.md).
 - **Checkpoint 2:** the engineer reviews grouping, role, scope and ranking (merge, split, rename, exclude, set role, scope or rank). `decide.py` records each choice, and orphaned decisions are re-linked or discarded before the commit.
 
 ### resume-sanitize
-- **Scan** (before the wizard): finds candidate sensitive terms in projects, evidence excerpts and the profile, and proposes generalizations into `05-terms/candidates.json`.
-- **Apply** (after write): applies `decisions/terms.json` to bullets, stories and the profile's prose (highlights, summary), writing `07-sanitized/` including `stories.md`. It leaves profile fact fields (names, titles, dates) unchanged: a denied term in one is replaced by a wizard answer at that path in `decisions/profile.json`. Newly detected terms go to `new-terms.json` for checkpoint 4.
+Detailed in the [resume-sanitize spec](2026-09-25-resume-sanitize-design.md).
+- **Scan** (before the wizard): `scan.py` reads what resume-write will write about (each project's name, summary and rank reasons; the title and excerpt of each project's evidence and of every performance review, and the review's full text; every string of the imported profile) and prints likely terms. The model proposes candidates with generalizations. `scan.py --commit` checks them, fills in `found_in` (places `pj_…`, `ev_…`, `resume:<pointer>`) and commits `05-terms/candidates.json`. `05-terms` does not record `decisions/terms.json`, so deciding terms leaves it fresh.
+- **Apply** (after write): `apply.py` replaces each denied match (the terms check's rules, allowed terms exempting) with its replacement, capitalized at a sentence start, in bullets, stories and the profile's prose (`summary`, `description`, `highlights`, `reference`), writing `07-sanitized/` including `stories.md`. It leaves profile fact fields (names, titles, dates) and `x-lines` unchanged: a denied term in one is replaced by a wizard answer at that path in `decisions/profile.json`, and apply warns about it. It refuses a replacement that holds a denied term and checks its output with the terms check. The model lists undecided terms it finds in the sanitized text in `new-terms.json` for checkpoint 4, which must include every undecided candidate still there. `07-sanitized` records `decisions/terms.json`, so a new decision makes it stale.
 - **Terms check** (`check_terms.py`, used here and by render) matches strictly. Terms and text are both normalized: Unicode NFKC, every format character (category `Cf`, which includes zero-width characters and the soft hyphen), the rest of the Default_Ignorable_Code_Point set (U+034F, U+115F–1160, U+17B4–17B5, U+180B–180F, U+3164, U+FE00–FE0F, U+FFA0, U+1BCA0–1BCA3, U+1D173–1D17A, U+E0000–E0FFF) and the Braille blank U+2800 removed, then case-folded. A term's words may be separated by any run of whitespace, `_`, dash punctuation (category `Pd`), U+2212 minus, `.`, `/`, `\`, U+00B7 middle dot, U+2215, U+2044, U+2027, U+2043, U+02D7, U+30FB or U+2022, or by nothing, so `Project Falcon` also matches `Project-Falcon`, `Project—Falcon`, `Project.Falcon`, `ProjectFalcon` and a term broken across a line. For terms of 5 or more characters (not counting separators) an optional plural `s`/`es` still matches (`Falcons`), but a longer word does not (`Falconry`); shorter terms get no plural, so `Rat` does not flag `rates`. Text files are scanned as one string and each match is reported with the line where it starts, counting lines as `str.splitlines()` does. The check fails closed: a missing or invalid `decisions/terms.json` is an error.
 - **Allowed terms win.** An allowed term (`replacement: null`) exempts a denied match when the allowed term matches a span of the normalized text that fully contains the denied match. Allowed terms match literally: normalized and case-insensitive, whole-word, with no separator flexibility and no plural. So with `Check Point` denied and `checkpoint` allowed, "Added a checkpoint" passes and "Worked at Check Point" is still flagged. The engineer resolves a false positive by adding an allowed term or by rewording; the check itself is never weakened. Because allowed terms match literally, the engineer adds plural forms (`checkpoints`) as separate allowed terms. An allowed term may not equal a denied term or contain one as a whole word (both normalized, separator runs as single spaces): with `Contoso` denied, allowing `Contoso Bank` is an error in `decisions/terms.json`, so an allowed term can fix a false positive but never leak a denied name.
 - **Known limits:** homoglyphs (for example a Cyrillic `о` in `Cоntoso`) are not detected by the terms check. The engineer's review at checkpoint 4 is the backstop. An allowed term that joins a denied term's words or adds a plural (`ContosoBank` or `contoso-banks` allowed beside denied `Contoso Bank`) exempts every literal use of itself, so it could let the denied name through; `check_terms.py` prints a notice for each such pair and the engineer confirms at checkpoint 4 that it is a different word. Fact fields such as `work[].position`, `basics.name`, `certificates[].name` and `skills[].keywords` are checked against the profile, not against evidence: the check proves a fact was copied from the profile, not that the profile is right.
 
 ### resume-wizard (checkpoint 3)
-A single session for: metric values for `metric_prompt` projects, missing profile fields (contact details, dates, education), and term approvals from `05-terms/candidates.json`, including a replacement value for any profile fact field that holds a denied term. Writes only to `decisions/`; profile answers follow the effective-profile rules (arrays of objects merge by index, `{}` keeps an imported entry). Skips items already answered in earlier runs.
+Detailed in the [resume-wizard spec](2026-09-25-resume-wizard-design.md). A single session for: metric values for `metric_prompt` projects, missing profile fields (name, contact details, location, links, job dates, education, certificates), and term approvals from `05-terms/candidates.json` and `07-sanitized/new-terms.json`, including a replacement value for any profile fact field that holds a denied term. `questions.py` lists the open questions in a fixed order; `answer.py` records each answer, checked, and writes only to `decisions/`. Profile answers follow the effective-profile rules (arrays of objects merge by index, `{}` keeps an imported entry), and each answer inside an array is anchored to the imported entry it was given for, so the wizard can fix answers that a re-import moved. It also re-links or removes metrics whose project is gone. Skips items already answered or declined in earlier runs.
 
 ### resume-write
 Writes XYZ bullets per project: `xyz_quantified` when a confirmed metric exists, otherwise `xyz`. Writes STAR stories for top-N projects to `06-bullets/stories.md` using the same sources. Earlier roles' bullets come from the imported resume. Every bullet has a non-empty `sources`.
@@ -279,7 +284,7 @@ init → collect [CP1] → import → analyze [CP2] → sanitize scan
      → [CP4: bullets, ATS reports, job flags, new terms] → render
 ```
 
-Every checkpoint persists its choices to `decisions/`, so an interrupted run resumes where it stopped.
+Every checkpoint persists its choices to `decisions/`, so an interrupted run resumes where it stopped. Checkpoint 4 decides new terms by running the wizard, which asks about `07-sanitized/new-terms.json`, and then sanitize apply again.
 
 ## Error handling
 
@@ -294,6 +299,8 @@ Every checkpoint persists its choices to `decisions/`, so an interrupted run res
 | Scanned PDF without text | Explain, and ask for DOCX, TXT or pasted text. No OCR in v1. |
 | Stale stages | List them and offer to rebuild in dependency order. |
 | Orphaned project decisions | Presented at checkpoint 2 to re-link or discard, with the closest current project. `match_projects.py` commits nothing while one remains. |
+| A term replacement that holds a denied term | The wizard refuses to record it. Sanitize apply refuses to run on such a `decisions/terms.json`. |
+| A wizard answer whose imported entry moved | Asked again in the wizard (move, confirm or remove) until resolved. |
 | Render check fails | No output files. Failing records listed with the fixing command. |
 
 ## Testing
@@ -324,7 +331,7 @@ Each gets its own spec → plan → implementation cycle, in this order. Progres
 3. **resume-import:** text extraction and profile mapping ([spec](2026-09-25-resume-import-design.md)).
 4. **resume-collect:** connector discovery, normalizers, git log, reviews, linking ([spec](2026-09-25-resume-collect-design.md)).
 5. **resume-analyze:** signals, grouping, role and scope, ranking, ID continuity ([spec](2026-09-25-resume-analyze-design.md)).
-6. **resume-sanitize** and **resume-wizard.**
+6. **resume-sanitize** and **resume-wizard:** term scan and apply, checkpoint 3 ([sanitize spec](2026-09-25-resume-sanitize-design.md), [wizard spec](2026-09-25-resume-wizard-design.md)).
 7. **resume-write:** XYZ bullets and STAR stories.
 8. **resume-ats:** lint, keywords, per-job tailoring and claim diffing.
 9. **resume-build** and **commands:** orchestration, staleness, checkpoints; plugin manifest and marketplace.

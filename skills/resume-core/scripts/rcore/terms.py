@@ -18,10 +18,15 @@ contain a denied term (see allowed_conflicts); terms.json is then invalid.
 An allowed term that merely looks like a denied term (for example "ContosoBank"
 beside denied "Contoso Bank") is valid but gets a notice (see allowed_notices)
 that the engineer must confirm at checkpoint 4.
+
+find() returns the matches as spans of the original text, for replacing them
+(resume-sanitize); replacement_conflicts() rejects a replacement that holds a
+denied term; key() says when two spellings are the same term.
 """
 from __future__ import annotations
 
 import bisect
+import functools
 import re
 import sys
 import unicodedata
@@ -80,27 +85,48 @@ class Patterns:
     allowed: list[re.Pattern] = field(default_factory=list)
 
 
-def _read_terms(workspace: Path) -> tuple[list[str], list[str], list[str]]:
-    """Return (denied, allowed, errors)."""
+def read_entries(workspace: Path) -> tuple[list[dict], list[str]]:
+    """Return (entries, errors) for decisions/terms.json.
+
+    errors is non-empty, and entries empty, when the file is missing, not
+    JSON, does not match its schema, or allows a term that contains a denied
+    one. The terms check fails closed on the same errors.
+    """
     if not (Path(workspace) / TERMS_FILE).is_file():
-        return [], [], [f"{TERMS_FILE}: not found; run init_workspace.py"]
+        return [], [f"{TERMS_FILE}: not found; run init_workspace.py"]
     data, error = wsio.load(workspace, TERMS_FILE)
     if error:
-        return [], [], [error]
+        return [], [error]
     problems = schema.validate(data, schema.load_schema("terms"))
     if problems:
-        return [], [], [f"{TERMS_FILE}: {p}" for p in problems]
-    denied = [t["term"] for t in data if t["replacement"] is not None]
-    allowed = [t["term"] for t in data if t["replacement"] is None]
-    conflicts = allowed_conflicts(denied, allowed)
+        return [], [f"{TERMS_FILE}: {p}" for p in problems]
+    conflicts = allowed_conflicts([t["term"] for t in data if t["replacement"] is not None],
+                                  [t["term"] for t in data if t["replacement"] is None])
     if conflicts:
-        return [], [], conflicts
-    return denied, allowed, []
+        return [], conflicts
+    return data, []
+
+
+def _read_terms(workspace: Path) -> tuple[list[str], list[str], list[str]]:
+    """Return (denied, allowed, errors)."""
+    entries, errors = read_entries(workspace)
+    denied = [t["term"] for t in entries if t["replacement"] is not None]
+    allowed = [t["term"] for t in entries if t["replacement"] is None]
+    return denied, allowed, errors
 
 
 def _words(term: str) -> str:
     """The normalized term with each run of separators replaced by one space."""
     return " ".join(w for w in re.split(_SEPARATOR + "+", normalize(term)) if w)
+
+
+def key(term: str) -> str:
+    """The normalized words of a term, joined by single spaces.
+
+    Two terms with the same key are the same term to the check: "Contoso Bank",
+    "contoso-bank" and "CONTOSO  BANK" all have the key "contoso bank".
+    """
+    return _words(term)
 
 
 def _conflicts(allowed: str, denied: str) -> bool:
@@ -205,22 +231,105 @@ def compile_terms(terms: list[str], allowed: list[str] | tuple = ()) -> Patterns
     )
 
 
-def _reported_starts(normalized: str, patterns: Patterns) -> list[tuple[int, int, str]]:
-    """(start, term index, term) of each denied match not inside an allowed match."""
+def _denied_hits(normalized: str, patterns: Patterns) -> list[tuple[int, int, int, str]]:
+    """(start, end, term index, term) of each denied match not inside an allowed match."""
     allowed = [span for p in patterns.allowed for span in _all_matches(p, normalized)]
     hits = []
     for index, (term, pattern) in enumerate(patterns.denied):
         for start, end in _all_matches(pattern, normalized):
             if not any(a <= start and end <= b for a, b in allowed):
-                hits.append((start, index, term))
+                hits.append((start, end, index, term))
     return hits
+
+
+def _reported_starts(normalized: str, patterns: Patterns) -> list[tuple[int, int, str]]:
+    """(start, term index, term) of each denied match not inside an allowed match."""
+    return [(start, index, term) for start, _, index, term in _denied_hits(normalized, patterns)]
+
+
+@functools.lru_cache(maxsize=16384)
+def _normalized(text: str) -> str:
+    """normalize(text), cached: find() looks for each term in the same texts."""
+    return normalize(text)
+
+
+@functools.lru_cache(maxsize=4096)
+def _normalized_pieces(text: str) -> tuple[str, list[int], list[int]]:
+    """normalize(text) computed a piece at a time, with the source span of each output character.
+
+    A piece is a character with the combining marks that follow it, so a base
+    letter and its accent normalize together. Output character k came from
+    text[starts[k]:ends[k]].
+    """
+    out: list[str] = []
+    starts: list[int] = []
+    ends: list[int] = []
+    i = 0
+    while i < len(text):
+        j = i + 1
+        while j < len(text) and unicodedata.combining(text[j]):
+            j += 1
+        piece = normalize(text[i:j])
+        out.append(piece)
+        starts += [i] * len(piece)
+        ends += [j] * len(piece)
+        i = j
+    return "".join(out), starts, ends
+
+
+def find(text: str, patterns: Patterns) -> list[tuple[int, int, str]]:
+    """Denied matches in text as (start, end, term) spans of text itself.
+
+    Matching follows the check: normalized text, separator runs, plurals,
+    whole words, and allowed terms exempting a match they cover. Overlapping
+    matches keep the leftmost, then the longest. The text is normalized in
+    pieces (see _normalized_pieces) so that each match maps back to the
+    original characters; for the rare text whose pieces normalize differently
+    from the whole (for example Hangul jamo), callers verify their result
+    with scan_text or scan_json.
+    """
+    if not _denied_hits(_normalized(text), patterns):
+        return []  # the usual case, without mapping the text piece by piece
+    normalized, starts, ends = _normalized_pieces(text)
+    hits = sorted(((s, e, term) for s, e, _, term in _denied_hits(normalized, patterns)),
+                  key=lambda h: (h[0], h[0] - h[1]))
+    spans, reached = [], 0
+    for start, end, term in hits:
+        if start >= reached:
+            spans.append((starts[start], ends[end - 1], term))
+            reached = end
+    return spans
+
+
+def replacement_conflicts(entries: list[dict]) -> list[str]:
+    """Errors for denied terms whose replacement contains a denied term.
+
+    entries are decisions/terms.json records. A replacement that holds a
+    denied term (its own or another) would put that term back into the text
+    sanitize writes, which the terms check then rejects. Allowed terms exempt
+    as they do in the check.
+    """
+    denied = [e for e in entries if e.get("replacement") is not None]
+    patterns = compile_terms([e["term"] for e in denied],
+                             [e["term"] for e in entries if e.get("replacement") is None])
+    errors = []
+    for entry in denied:
+        errors += [f"{TERMS_FILE}: the replacement for '{entry['term']}' ('{entry['replacement']}') "
+                   f"contains the denied term '{term}'" for term in terms_in(entry["replacement"], patterns)]
+    return errors
+
+
+def terms_in(text: str, patterns: Patterns) -> list[str]:
+    """The denied terms the check finds in text, each once, in denylist order."""
+    return [term for _, term in sorted({(index, term) for _, index, term
+                                        in _reported_starts(normalize(text), patterns)})]
 
 
 def scan_json(doc, patterns: Patterns, label: str) -> list[str]:
     errors = []
     for pointer, text in wsio.iter_strings(doc):
-        found = sorted({(index, term) for _, index, term in _reported_starts(normalize(text), patterns)})
-        errors += [f"{label}:{pointer or '/'}: contains denylisted term {term!r}" for _, term in found]
+        errors += [f"{label}:{pointer or '/'}: contains denylisted term {term!r}"
+                   for term in terms_in(text, patterns)]
     return errors
 
 

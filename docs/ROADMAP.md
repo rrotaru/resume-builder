@@ -9,6 +9,8 @@ Short names used below:
 - **Import spec** is the [resume-import spec](superpowers/specs/2026-09-25-resume-import-design.md).
 - **Collect spec** is the [resume-collect spec](superpowers/specs/2026-09-25-resume-collect-design.md).
 - **Analyze spec** is the [resume-analyze spec](superpowers/specs/2026-09-25-resume-analyze-design.md).
+- **Sanitize spec** is the [resume-sanitize spec](superpowers/specs/2026-09-25-resume-sanitize-design.md).
+- **Wizard spec** is the [resume-wizard spec](superpowers/specs/2026-09-25-resume-wizard-design.md).
 - **Core** is [`skills/resume-core/SKILL.md`](../skills/resume-core/SKILL.md): workspace rules, source references, the profile overlay and the checks.
 
 ## Start here
@@ -53,26 +55,31 @@ Short names used below:
     - `decide.py` is checkpoint 2's only writer of `decisions/projects.json`.
   - `04-projects/` holds `signals.json`, `groups.json` and `projects.json`. `groups.json` is the model's grouping before decisions, with IDs. `projects.json` is the result after decisions, and the only file later stages read. An orphaned decision (its project is not in this run) is shown with the closest project and blocks the commit (exit 3) until it is re-linked or discarded.
   - Added to resume-core: `signals.schema.json` and `project-groups.schema.json`, and the `set_rank` action (with `rank`) and an optional `rename` `summary` in `project-decisions.schema.json`. The fixture gains `04-projects/signals.json` and `groups.json`. The scripts rebuild them and `projects.json` byte for byte.
-- [ ] **6. resume-sanitize and resume-wizard (checkpoint 3).** Arch [resume-sanitize](superpowers/specs/2026-09-24-resume-builder-architecture-design.md#resume-sanitize) and [resume-wizard](superpowers/specs/2026-09-24-resume-builder-architecture-design.md#resume-wizard-checkpoint-3); Core "The profile" and "Checks".
-  - Sanitize scan writes `05-terms/candidates.json` (`term-candidates.schema.json`; fixture exists).
-  - Sanitize apply writes `07-sanitized/`: `bullets.json`, `profile.json`, `stories.md` and `new-terms.json`. The fixture has all but `new-terms.json`.
-  - **Must** (sanitize) write `07-sanitized/stories.md`. Render copies only that file and never `06-bullets/stories.md`.
-  - **Must** (sanitize) leave profile fact fields (names, titles, dates) unchanged, rewriting only prose (Render spec [Confidential values](superpowers/specs/2026-09-25-resume-render-design.md#confidential-values)). Copy `x-lines` unchanged.
-  - The wizard writes only `decisions/`: `metrics.json`, `profile.json`, `terms.json`. It skips items already answered.
-  - **Must** (wizard) write profile answers under the overlay rules. Arrays of objects merge by index, and `{}` keeps an imported entry, so `"work": [{}, {"endDate": "2022-12"}]` fills the second job's end date (Core "The profile").
-  - **Must** (wizard) ask for a replacement value when a fact field contains a denied term, and store it at that path in `decisions/profile.json`.
-  - The wizard owns fixing answers that a re-import moved: `check_profile.py --commit` prints a `warning:` for each (Import spec [Re-import](superpowers/specs/2026-09-25-resume-import-design.md#re-import)).
-  - The wizard asks for metrics only for projects with `metric_prompt: true`. A metric's `project_id` is that project's `id` in `04-projects/projects.json`. `match_projects.py` prints a `warning:` for a metric whose project is gone (excluded, merged away or regrouped), and the wizard re-links or removes it, because it owns `decisions/metrics.json`.
-  - The sanitize scan reads `04-projects/projects.json` (`internal_name`, `summary`, `rank_reasons`). `signals.json` and `groups.json` repeat evidence titles and names from before the engineer's renames, but nothing renders them.
+- [x] **6. resume-sanitize and resume-wizard (checkpoint 3).** Sanitize spec and Wizard spec; [#7](https://github.com/rrotaru/resume-builder/pull/7).
+  - Shipped resume-sanitize's `scan.py` and `apply.py`, each with `--commit` for its second step.
+    - `scan.py` begins `05-terms` and prints the likely terms that `decisions/terms.json` does not decide yet, each with its places. It reads each project's name, summary and rank reasons, the title and excerpt of each project's evidence and of every performance review, each review's full text in `01-raw/`, and every string of `03-profile/profile.json`. The model writes `candidates.json`. `scan.py --commit` checks it, fills in `found_in` (`pj_…`, `ev_…`, `resume:<pointer>`) and commits.
+    - `apply.py` replaces each denied match with its replacement in bullets, `stories.md` and the profile's prose. It uses the terms check's rules through `rcore.terms.find`, lets allowed terms exempt a match, and capitalizes a replacement at a sentence start. It writes `07-sanitized/` and checks the result with the terms check. The model writes `new-terms.json`. `apply.py --commit` requires it to list every undecided candidate still in the text, then commits.
+  - Shipped resume-wizard's `questions.py` and `answer.py`. `questions.py` lists, in order: moved answers, metrics whose project is gone, undecided terms (from `05-terms/candidates.json` and `07-sanitized/new-terms.json`), fact fields that hold a denied term, missing profile fields, and `metric_prompt` projects without a metric. `answer.py` records one checked answer per command, and every file is left unchanged on error.
+  - Added to resume-core:
+    - `rcore.terms` `find`, `terms_in`, `key`, `read_entries` and `replacement_conflicts`.
+    - `rcore.profile` gains the JSON Resume vocabulary, `PROSE_FIELDS`, `identity`, `describe`, `merged_arrays` and `is_date`. resume-import now imports these from `rcore.profile`.
+    - `rcore.facts.fact_values`.
+    - `wizard-state.schema.json` for `decisions/wizard.json` (created by `init_workspace.py`), and optional `evidence_ids` in `metrics.schema.json`.
+  - The fixture gains `found_in` in `candidates.json`, `07-sanitized/new-terms.json` (`[]`) and `decisions/wizard.json`. `07-sanitized/bullets.json` `b_1` is now the mechanical replacement. Both sanitize halves rebuild the saved files byte for byte, and the fixture has no open wizard questions.
 - [ ] **7. resume-write.** Arch [resume-write](superpowers/specs/2026-09-24-resume-builder-architecture-design.md#resume-write), "Bullet" in Data contracts.
   - Writes `06-bullets/bullets.json` (`bullets.schema.json`; fixture exists) and `06-bullets/stories.md` (text, unsanitized).
   - Use `xyz_quantified` only when a confirmed metric exists, otherwise `xyz`. Every bullet has non-empty `sources`, and bullets for earlier roles set `work_ref` and cite `resume:` pointers.
   - Read `04-projects/projects.json`, never `groups.json`. Performance reviews are never in a project's `evidence_ids`, so cite them directly (`ev_…`) where they support a bullet. `start` and `end` are the months of the project's evidence, not job dates. A part split off by the engineer has an empty `summary` until it is renamed.
+  - **Must** write `06-bullets/stories.md` as well as `bullets.json`: sanitize apply refuses to run without it.
+  - Write codenames and customer names as the evidence spells them. Sanitize apply replaces them mechanically, with the replacement as the engineer decided it, and capitalizes only at a sentence start. So `for Contoso Bank` becomes `for a top-10 US bank`, but `the Contoso Bank team` becomes `the a top-10 US bank team`. The engineer reviews every changed line at checkpoint 4.
+  - A metric's `statement` states its `value`, and `evidence_ids` is its project's evidence when it was recorded. Cite `metric:<id>` only for a metric whose `project_id` is the bullet's project.
 - [ ] **8. resume-ats.** Arch [resume-ats](superpowers/specs/2026-09-24-resume-builder-architecture-design.md#resume-ats) and "Tailored resume" in Data contracts.
   - Writes `08-ats/general/` (`resume.json`, `report.json`) and `08-ats/jobs/<slug>/` (`jd.txt`, `resume.json`, `report.json`, `flags.json`).
   - `resume.json` and `flags.json` have schemas and fixtures. **`report.json` has no schema yet: add one.**
   - Scripts: `ats_lint.py`, `keywords.py`, `diff_claims.py`. To rebuild one job, run `stage.py begin 08-ats --from-current`.
   - **Must** copy fact fields exactly from the effective profile, shortening dates at most, and write no `x-sources` (Render spec [Fact fields](superpowers/specs/2026-09-25-resume-render-design.md#fact-fields)).
+  - Read bullets from `07-sanitized/bullets.json`, never `06-bullets/`. A keyword that holds a denied term cannot be replaced (keywords combine in the overlay), so leave it out. sanitize apply and `questions.py` print a note for each one.
+  - The engineer adds a keyword to `decisions/profile.json` with the wizard, `answer.py add /skills/N/keywords KEYWORD`. Nothing else writes that file.
   - **Must** make the claim diff record every examined bullet's hash in `flags.json` `checked`, including `basics.summary` under the id `summary`. Job slugs match `^[a-z0-9][a-z0-9-]*$`.
   - A keyword that is missing but has evidence enters `skills` only after the engineer adds it to `decisions/profile.json`.
   - Run `check_sources.py` on every tailored resume before committing, since render will.
@@ -85,6 +92,10 @@ Short names used below:
   - Checkpoint 2 left unfinished is a `04-projects.tmp/` holding `groups.json`: continue it with `match_projects.py`. `signals.py` begins a fresh `04-projects.tmp/` and discards the draft. When the evidence has not changed, reuse the committed grouping with `stage.py begin 04-projects --from-current` and `match_projects.py`. `match_projects.py --commit` exits 3 while a decision is orphaned.
   - `04-projects` records `01-raw`, `02-evidence/evidence.jsonl`, `config.json` and `decisions/projects.json` as inputs, so a decision recorded after the commit makes it stale.
   - **Must** (checkpoint 4) show every allowed-term notice (`rcore.terms.allowed_notices`) and have the engineer confirm each.
+  - Checkpoint 3 is the wizard. Run `questions.py` until it prints `wizard: no open questions`. Deciding a term can open a `fact:` question, so run it again after each round.
+  - Checkpoint 4 decides the new terms in `07-sanitized/new-terms.json` by running the wizard, which asks about them, then sanitize apply again (`07-sanitized` records `decisions/terms.json`, so it is stale). The engineer also reviews every changed bullet and story line that apply printed, and its `warning:` lines.
+  - Sanitize halves resume like analyze. `scan.py` and `apply.py` without `--commit` begin a fresh `.tmp/`, which discards a draft. An interrupted scan is a `05-terms.tmp/candidates.json`: continue it with `scan.py --commit`. An interrupted apply is a `07-sanitized.tmp/new-terms.json`: continue it with `apply.py --commit`, which exits 1 if the inputs changed since.
+  - `05-terms` records `04-projects/projects.json`, `02-evidence/evidence.jsonl`, `01-raw` and `03-profile/profile.json`, and never `decisions/terms.json`, so deciding terms leaves it fresh. No stage records `decisions/wizard.json`.
   - **Must** (checkpoint 4) let the engineer accept, revert or edit each flagged job bullet, writing `decisions/attestations.json`. Render's `fix:` lines send flagged bullets to `/resume-builder:build`.
 
 ## Small follow-ups (any time)
@@ -92,4 +103,6 @@ Short names used below:
 - [ ] **Terms check and control characters.** `check_terms.py` doesn't treat control characters that aren't whitespace (such as U+0001) as separators, so `Project\u0001Falcon` passes it in a JSON file. Render's output check still catches it. The likely fix is to add them to `_SEPARATOR` in `rcore/terms.py`.
 - [ ] **CI actions on Node 20.** CI warns that `actions/checkout@v4` and `astral-sh/setup-uv@v6` target Node 20. Bump both to their current major versions.
 - [ ] **Merge-aware ID matching.** When the model itself groups the projects of a merge decision together, the group takes the ID of the project it overlaps most. If that is a project named in `merge_with`, the merge and the other decisions about the merged project are orphaned, and the engineer re-links or discards them (Analyze spec [Orphans](superpowers/specs/2026-09-25-resume-analyze-design.md#orphans)). `match_projects.py` could instead match such a group against the merged projects together, so the merged project keeps its ID.
+- [ ] **Wizard skips after a re-import.** A skip inside an entry (`profile:/work/1/startDate`) lapses when the imported entry there changes. It is asked again rather than moved with its entry. Moving skips the way `answer.py move` moves answers would avoid asking twice.
+- [ ] **Sanitize detector quality.** The likely-term detectors are regular-expression hints: capitalized runs, codename phrases, URLs, emails and money. Add them to the model-quality evals (Arch "Testing") with a small set of made-up evidence holding real-looking customer names, to measure what the model still misses.
 - [ ] **Playwright pin.** `render.py` pins `playwright==1.56.0` (Chromium build 1194). Bumping it also changes the browser build that `--install-browser` fetches.

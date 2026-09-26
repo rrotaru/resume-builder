@@ -208,3 +208,21 @@ def test_schema_invalid_resume_is_a_problem_line(workspace):
     assert sources.check_file(workspace, JOB) == [f"{JOB}: does not match its schema; run validate.py"]
     _edit_job(workspace, lambda r: r.update(work=[], awards=[{"title": "x"}]))
     assert sources.check_file(workspace, JOB) == [f"{JOB}: does not match its schema; run validate.py"]
+
+
+def test_fact_values_are_the_fields_a_tailored_resume_may_copy():
+    doc = {"basics": {"name": "Jordan Rivera", "summary": "prose", "image": "x.png",
+                      "location": {"city": "Denver", "address": "1 Main St"},
+                      "profiles": [{"network": "GitHub", "url": "https://github.com/jrivera"}]},
+           "work": [{"name": "Northwind", "position": "Engineer", "description": "prose", "highlights": ["prose"],
+                     "x-lines": {"first": 1, "last": 2}}],
+           "education": [{"institution": "State", "courses": ["Algorithms"]}],
+           "skills": [{"name": "Backend", "keywords": ["Go", "Redis"]}],
+           "volunteer": [{"organization": "Code Club"}]}
+    assert facts.fact_values(doc) == [
+        ("/basics/name", "Jordan Rivera"), ("/basics/location/city", "Denver"),
+        ("/basics/location/address", "1 Main St"), ("/basics/profiles/0/network", "GitHub"),
+        ("/basics/profiles/0/url", "https://github.com/jrivera"),
+        ("/work/0/name", "Northwind"), ("/work/0/position", "Engineer"),
+        ("/education/0/institution", "State"),
+        ("/skills/0/name", "Backend"), ("/skills/0/keywords/0", "Go"), ("/skills/0/keywords/1", "Redis")]
