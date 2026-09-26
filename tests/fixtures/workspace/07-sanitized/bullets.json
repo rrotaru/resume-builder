@@ -2,7 +2,7 @@
   {
     "id": "b_1",
     "project_id": "pj_da2a2b53",
-    "work_ref": null,
+    "work_ref": 0,
     "text": "Cut p99 checkout latency 40% for a top-10 US bank by building a Redis-backed idempotency cache for real-time fraud-detection platform in Go",
     "form": "xyz_quantified",
     "sources": [

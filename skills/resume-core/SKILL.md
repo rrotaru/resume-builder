@@ -55,6 +55,8 @@ Every bullet's `sources` list holds one or more of:
 
 A `resume:` or `wizard:` pointer must start with `/` and point to a single string or number, not to an object, array, boolean or null.
 
+A bullet in `06-bullets/bullets.json` (and `07-sanitized/bullets.json`) names its place on the resume. `work_ref` is the index, in the effective profile's `work` (see [The profile](#the-profile)), of the job it goes under: for a project bullet, a job whose dates overlap the project's months. A bullet about a profile `projects` entry has `work_ref` null and cites a `resume:/projects/<i>/…` pointer. A project bullet with `work_ref` null and no such pointer falls in no job, and has no place until the engineer adds the job with the wizard. resume-write's `write.py --commit` checks this, and that a bullet cites only its own project's evidence, performance reviews, its project's metrics and the profile.
+
 ## Tailored resumes and job flags
 
 - `08-ats/general/resume.json` and `08-ats/jobs/<slug>/resume.json` follow `schemas/tailored-resume.schema.json`. Only the sections `basics`, `work`, `projects`, `education`, `certificates` and `skills` are allowed. Every `work` and `projects` entry has `x-highlights` (`{bullet_id, text, sources}`, possibly empty) and `highlights` holding the same texts in order. Other sections carry no `highlights`. A `basics.summary` needs a non-empty `basics.x-summary-sources`. Every object accepts only the fields listed in the schema: `work` and `projects` entries have no `summary` or `description` (claims go in sourced highlights), and entries carry no `x-sources`. `basics.label`, if present, must equal `config.json` `target_role` or the profile's `basics.label`.
@@ -125,6 +127,10 @@ from rcore import ids, stages, wsio  # noqa: E402
 `terms.key(term)` (two spellings of one term share a key), `terms.read_entries(workspace)`,
 `terms.replacement_conflicts(entries)` (a replacement that holds a denied term),
 `wsio.read_json / write_json / read_jsonl / write_jsonl / resolve_pointer`,
-`documents.extract(data, fmt, name)` (the normalized text of a PDF, DOCX, TXT or Markdown file's bytes).
+`documents.extract(data, fmt, name)` (the normalized text of a PDF, DOCX, TXT or Markdown file's bytes),
+`numbers.numbers(text)` (numbers written with digits, as written and as exact decimal values), `numbers.states_value(text, value)`
+(a metric's statement or a bullet states the value), `numbers.unsupported(text, sources)` (numbers no source states),
+`numbers.digits(value)` (a JSON number written back with digits, never an exponent),
+`raw.RawReader(workspace).text(raw_ref)` (the text of the raw record at an evidence item's `raw_ref`, such as a performance review's full text).
 
 `rcore` imports only the standard library. `documents` imports `pypdf` or `python-docx` only when it reads a PDF or DOCX, so a script that reads those formats pins them in its PEP 723 block, at the versions `render.py` pins.

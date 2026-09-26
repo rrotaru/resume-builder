@@ -8,16 +8,15 @@ places carry the line a match starts on (stories.md:3).
 """
 from __future__ import annotations
 
-import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
 
 from rcore import terms, wsio
+from rcore.raw import RawReader
 
 from .replace import prose
 
-_RAW_REF = re.compile(r"^(01-raw/[^:]+):([1-9][0-9]*)#(/.*)$")
 _LINE_BREAK = re.compile("\r\n|[\n\r\x0b\x0c\x1c\x1d\x1e\x85  ]")
 
 
@@ -39,44 +38,6 @@ def line_of(text: str, offset: int) -> int:
 
 
 # The scan ----------------------------------------------------------------------
-
-class RawReader:
-    """Reads raw records at raw_ref (01-raw/<file>:<line>#/items/<i>), each file once."""
-
-    def __init__(self, workspace: Path):
-        self.workspace = Path(workspace)
-        self.files: dict[str, list[str] | str] = {}
-
-    def _lines(self, rel: str):
-        if rel not in self.files:
-            try:
-                self.files[rel] = (self.workspace / rel).read_text(encoding="utf-8").split("\n")
-            except FileNotFoundError:
-                self.files[rel] = "not found"
-            except (OSError, UnicodeDecodeError) as exc:
-                self.files[rel] = f"cannot be read ({exc.__class__.__name__})"
-        return self.files[rel]
-
-    def text(self, raw_ref) -> tuple[str | None, str | None]:
-        """(the record's text, None), or (None, why it could not be read)."""
-        match = _RAW_REF.match(raw_ref) if isinstance(raw_ref, str) else None
-        if match is None:
-            return None, "is not a raw reference"
-        lines = self._lines(match.group(1))
-        if isinstance(lines, str):
-            return None, f"{match.group(1)} {lines}"
-        number = int(match.group(2))
-        if number > len(lines) or not lines[number - 1].strip():
-            return None, f"{match.group(1)} has no line {number}"
-        try:
-            record = wsio.resolve_pointer(json.loads(lines[number - 1]), match.group(3))
-        except (ValueError, KeyError):
-            return None, "does not resolve"
-        text = record.get("text") if isinstance(record, dict) else None
-        if not isinstance(text, str):
-            return None, "has no text"
-        return text, None
-
 
 @dataclass
 class ScanTexts:
