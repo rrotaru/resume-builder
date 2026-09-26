@@ -18,7 +18,7 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-from rcore import sources, wsio
+from rcore import numbers, sources, wsio
 from rcore.profile import is_date
 from rcore.raw import RawReader
 
@@ -78,11 +78,6 @@ def x_field(ref: str) -> str | None:
     return None
 
 
-def _number_text(value) -> str:
-    """A number as digits without an exponent, so rcore.numbers reads it back."""
-    return format(value, "f") if isinstance(value, float) else str(value)
-
-
 def is_review(item: dict) -> bool:
     return item["kind"] == "perf_review"
 
@@ -131,7 +126,7 @@ class Material:
             return self.texts.get(ref, [])
         if ref.startswith("metric:"):
             metric = self.metric(ref[len("metric:"):])
-            return [_number_text(metric["value"]), metric["statement"]] if metric else []
+            return [numbers.digits(metric["value"]), metric["statement"]] if metric else []
         for prefix, doc in (("resume:", self.known.profile), ("wizard:", self.known.wizard)):
             if ref.startswith(prefix):
                 try:
@@ -140,7 +135,7 @@ class Material:
                     return []
                 if isinstance(value, bool) or not isinstance(value, (str, int, float)):
                     return []
-                return [value if isinstance(value, str) else _number_text(value)]
+                return [value if isinstance(value, str) else numbers.digits(value)]
         return []
 
     def story_texts(self, project: dict) -> list[str]:
@@ -148,7 +143,7 @@ class Material:
         found = [t for e in project["evidence_ids"] for t in self.texts.get(e, [])]
         found += [t for review in self.reviews for t in self.texts[review["id"]]]
         for metric in self.metrics_of(project["id"]):
-            found += [_number_text(metric["value"]), metric["statement"]]
+            found += [numbers.digits(metric["value"]), metric["statement"]]
         return found
 
     def required_pointers(self) -> list[str]:
@@ -190,10 +185,12 @@ def build(workspace: Path, inputs: Inputs) -> Material:
     reader, texts, warnings = RawReader(workspace), {}, []
     for item in inputs.evidence:
         found = [item["title"], item.get("excerpt") or ""]
-        if is_review(item):
-            text, why = reader.text(item.get("raw_ref"))
+        if is_review(item) and item.get("raw_ref") is None:
+            warnings.append(f"{item['id']}: has no raw_ref; its excerpt stands in for the review's text")
+        elif is_review(item):
+            text, why = reader.text(item["raw_ref"])
             if text is None:
-                warnings.append(f"{item['id']}: the raw record {item.get('raw_ref')} {why}; "
+                warnings.append(f"{item['id']}: the raw record {item['raw_ref']} {why}; "
                                 "its excerpt stands in for the review's text")
             else:
                 found.append(text)

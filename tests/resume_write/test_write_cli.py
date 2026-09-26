@@ -263,6 +263,21 @@ def test_warnings_and_notes(tmp_path, capsys):
     assert "  b_1  no place  pj_0000000a  xyz  Built an idempotency cache\n" in out
 
 
+def test_a_review_without_a_raw_ref(tmp_path, capsys):
+    from write_samples import EVIDENCE
+    evidence = [dict(e) for e in EVIDENCE]
+    del evidence[4]["raw_ref"]  # optional in evidence.schema.json
+    ws = make_workspace(tmp_path, evidence=evidence)
+    assert write.main(ws_arg(ws)) == 0
+    out = capsys.readouterr().out
+    assert out.startswith(f"warning: {eid(5)}: has no raw_ref; its excerpt stands in for the review's text\n")
+    assert f"  {eid(5)}  2025-07-15  2025 H1 review  no raw record: only its excerpt\n" in out
+    bullets = good_bullets()
+    bullets[2]["text"] = "Led the cache work"  # 30% is only in the full text, which cannot be read
+    draft(ws, bullets)
+    assert write.main([*ws_arg(ws), "--commit"]) == 0
+
+
 def test_no_profile(tmp_path, capsys):
     ws = make_workspace(tmp_path, profile=None)
     assert write.main(ws_arg(ws)) == 0

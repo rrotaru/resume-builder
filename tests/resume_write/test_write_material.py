@@ -2,7 +2,7 @@
 import pytest
 
 from rwrite import common, material
-from write_samples import PA, PB, PROFILE, REVIEW_TEXT, eid, make_workspace, project
+from write_samples import EVIDENCE, PA, PB, PROFILE, REVIEW_TEXT, eid, make_workspace, project
 
 
 def build(ws):
@@ -73,7 +73,7 @@ def test_a_float_metric_value_reads_back_without_an_exponent(tmp_path):
     metrics = [{"id": "m_1", "project_id": PA, "value": 12000000000000000.0, "unit": "requests",
                 "statement": "served 12000000000000000 requests"}]
     found = build(make_workspace(tmp_path, metrics=metrics))
-    assert found.source_texts("metric:m_1")[0].startswith("12000000000000000")
+    assert found.source_texts("metric:m_1")[0] == "12000000000000000"
 
 
 def test_an_unreadable_review_gives_a_warning_and_its_excerpt_stands_in(tmp_path):
@@ -81,6 +81,14 @@ def test_an_unreadable_review_gives_a_warning_and_its_excerpt_stands_in(tmp_path
     assert found.source_texts(eid(5)) == ["2025 H1 review", "Jordan led the cache work."]
     assert found.raw_warnings == [f"{eid(5)}: the raw record 01-raw/reviews.jsonl:1#/items/0 01-raw/reviews.jsonl "
                                   "not found; its excerpt stands in for the review's text"]
+
+
+def test_a_review_without_a_raw_ref(tmp_path):
+    evidence = [dict(e) for e in EVIDENCE]
+    del evidence[4]["raw_ref"]  # optional in evidence.schema.json
+    found = build(make_workspace(tmp_path, evidence=evidence))
+    assert found.source_texts(eid(5)) == ["2025 H1 review", "Jordan led the cache work."]
+    assert found.raw_warnings == [f"{eid(5)}: has no raw_ref; its excerpt stands in for the review's text"]
 
 
 def test_story_texts_are_the_projects_evidence_the_reviews_and_its_metrics(tmp_path):

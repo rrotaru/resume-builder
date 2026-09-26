@@ -138,6 +138,15 @@ def test_every_number_needs_a_source(tmp_path):
     assert check(tmp_path, edited(4, text="Built ledger-lint, a linter with 300 GitHub stars")) == []
 
 
+def test_large_numbers_must_match_exactly(tmp_path):
+    evidence = make_evidence()
+    evidence[2]["excerpt"] = "Retries ledger exports: 9007199254740992 rows so far."
+    assert check(tmp_path, edited(1, text="Retried 9007199254740993 ledger export rows"), evidence=evidence) == [
+        f"{D}: /1/text: the number '9007199254740993' is in none of its sources"]
+    assert check(tmp_path / "x", edited(1, text="Retried 9,007,199,254,740,992 ledger export rows"),
+                 evidence=evidence) == []
+
+
 def test_line_counts_are_not_a_source(tmp_path):
     evidence = [dict(e) for e in make_evidence()]
     evidence[2]["stats"] = {"additions": 812, "deletions": 140, "files": 23}

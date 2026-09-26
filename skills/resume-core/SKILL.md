@@ -128,8 +128,9 @@ from rcore import ids, stages, wsio  # noqa: E402
 `terms.replacement_conflicts(entries)` (a replacement that holds a denied term),
 `wsio.read_json / write_json / read_jsonl / write_jsonl / resolve_pointer`,
 `documents.extract(data, fmt, name)` (the normalized text of a PDF, DOCX, TXT or Markdown file's bytes),
-`numbers.numbers(text)` (numbers written with digits, as written and as values), `numbers.states_value(text, value)`
+`numbers.numbers(text)` (numbers written with digits, as written and as exact decimal values), `numbers.states_value(text, value)`
 (a metric's statement or a bullet states the value), `numbers.unsupported(text, sources)` (numbers no source states),
+`numbers.digits(value)` (a JSON number written back with digits, never an exponent),
 `raw.RawReader(workspace).text(raw_ref)` (the text of the raw record at an evidence item's `raw_ref`, such as a performance review's full text).
 
 `rcore` imports only the standard library. `documents` imports `pypdf` or `python-docx` only when it reads a PDF or DOCX, so a script that reads those formats pins them in its PEP 723 block, at the versions `render.py` pins.

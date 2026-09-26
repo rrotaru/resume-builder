@@ -96,7 +96,8 @@ def reviews(material: Material) -> list[str]:
     if not material.reviews:
         return ["performance reviews: none"]
     return ["performance reviews:"] + [
-        f"  {r['id']}  {r['created_at'][:10]}  {one_line(r['title'])}  full text at {r['raw_ref']}"
+        f"  {r['id']}  {r['created_at'][:10]}  {one_line(r['title'])}  "
+        + (f"full text at {r['raw_ref']}" if r.get("raw_ref") else "no raw record: only its excerpt")
         for r in material.reviews]
 
 

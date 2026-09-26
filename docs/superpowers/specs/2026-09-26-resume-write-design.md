@@ -51,7 +51,7 @@ skills/resume-write/
       stories.py           # checks of stories.md
       report.py            # what write.py prints
 skills/resume-core/scripts/rcore/
-  numbers.py               # new: numbers in a text, unsupported, states_value (moved from resume-wizard)
+  numbers.py               # new: numbers in a text, unsupported, digits, states_value (moved from resume-wizard)
   raw.py                   # new: RawReader, a record's text at raw_ref (moved from resume-sanitize)
 ```
 
@@ -147,12 +147,12 @@ Then it sorts each bullet's sources, assigns IDs, and writes the records back wi
 
 ### Numbers
 
-`rcore.numbers.numbers(text)` finds each number written with digits: a run of digits with optional thousands separators and decimals, so `p99` gives 99, `40%` 40, `1,200` 1200 and `2.5x` 2.5. A number is supported when some source text holds a number of the same value:
+`rcore.numbers.numbers(text)` finds each number written with digits: a run of digits with optional thousands separators and decimals, so `p99` gives 99, `40%` 40, `1,200` 1200 and `2.5x` 2.5. Values compare exactly, as decimals: `2.5` equals `2.50`, but `9007199254740993` never equals `9007199254740992`, as it would as floats. A number is supported when some source text holds a number of the same value:
 
 | Source | Text |
 |---|---|
-| `ev_…` | `title` and `excerpt`; for a performance review also its full text in `01-raw/` at `raw_ref` (`rcore.raw.RawReader`). If the raw record cannot be read, the excerpt stands in and a `warning:` says so. |
-| `metric:<id>` | `value` and `statement` |
+| `ev_…` | `title` and `excerpt`; for a performance review also its full text in `01-raw/` at `raw_ref` (`rcore.raw.RawReader`). If the review has no `raw_ref` (it is optional) or the raw record cannot be read, the excerpt stands in and a `warning:` says so. |
+| `metric:<id>` | `value` (written back with `rcore.numbers.digits`, never with an exponent) and `statement` |
 | `resume:` or `wizard:` pointer | the value it points to |
 
 Evidence `stats` (lines and files changed) are not sources: a line count is not an achievement. Numbers written as words (`two engineers`) are not checked, and neither is which unit follows a number; the engineer reviews the wording at checkpoint 4.
@@ -238,7 +238,7 @@ began 06-bullets.tmp/: write 06-bullets.tmp/bullets.json and 06-bullets.tmp/stor
 
 A job with `projects: none` is an earlier role. A job prints its `highlights`, or its `summary` when it has none, and a profile project its `highlights`, or its `description`. A project's evidence prints in evidence order, and a project with an empty summary (a part split off at checkpoint 2) prints `(no summary)`. A project overlapping several jobs prints `jobs: /work/0 or /work/2 (it overlaps each; choose one)`, and one overlapping none `job: none in the profile`.
 
-`warning:` lines come first: no `03-profile/profile.json` (`no jobs or profile projects to put bullets under; run /resume-builder:import`), a metric whose project is not current (`warning: decisions/metrics.json m_2: pj_1d2c3b4a is not a project in 04-projects/projects.json; the wizard re-links or removes it`), a project in no job, and a review whose raw record cannot be read. Then a `note:` for each `metric_prompt` project without a metric: `note: pj_… 'Ledger export retries' has a metric prompt and no metric in decisions/metrics.json: its bullets use the xyz form; if the engineer has not been through the wizard, run /resume-builder:wizard first`.
+`warning:` lines come first: no `03-profile/profile.json` (`no jobs or profile projects to put bullets under; run /resume-builder:import`), a metric whose project is not current (`warning: decisions/metrics.json m_2: pj_1d2c3b4a is not a project in 04-projects/projects.json; the wizard re-links or removes it`), a project in no job, and a review with no `raw_ref` or whose raw record cannot be read. Such a review prints `no raw record: only its excerpt` in place of where its full text is. Then a `note:` for each `metric_prompt` project without a metric: `note: pj_… 'Ledger export retries' has a metric prompt and no metric in decisions/metrics.json: its bullets use the xyz form; if the engineer has not been through the wizard, run /resume-builder:wizard first`.
 
 With `--commit`, after the checks pass, it prints the warnings that still apply (a metric whose project is gone, an unreadable review, and `warning: 2 bullets of pj_… 'Ledger export' (2025-02 to 2025-05) have no place: no job of the profile overlaps it; …` for bullets without a place), then each bullet and story:
 
@@ -304,7 +304,7 @@ Never edit `06-bullets/` or `decisions/` by hand, and never weaken or skip a che
 
 ## Testing
 
-- **Numbers:** digits with separators and decimals, `p99`, a trailing comma; `states_value` as the wizard used it; a number from each kind of source, including a review's full text and a pointer's value; an unreadable raw record (excerpt, warning); `stats` not counted.
+- **Numbers:** digits with separators and decimals, `p99`, a trailing comma; exact comparison of large numbers; `digits` writing a JSON number back; `states_value` as the wizard used it; a number from each kind of source, including a review's full text and a pointer's value; a review without `raw_ref` and an unreadable raw record (excerpt, warning); `stats` not counted.
 - **Placement:** job months from `YYYY`, `YYYY-MM` and `YYYY-MM-DD`, open start, ongoing end; a project overlapping one, two and no jobs; a pointer into `/work/i` with another `work_ref`; a profile project pointer with a `work_ref`; two profile projects; a project bullet placed in a profile project; a bullet without a project and without a place; a job the wizard added.
 - **Sources:** another project's evidence, evidence in no project (including an excluded project's), a review on a project bullet and a job bullet, a project bullet citing none of its items, a metric of another project or of a bullet without a project, `x-lines` pointers, duplicates, unresolved references.
 - **Forms:** `xyz_quantified` without a metric, `xyz` with one, a text that does not state the metric's value.
