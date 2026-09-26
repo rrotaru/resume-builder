@@ -26,6 +26,7 @@ denied term; key() says when two spellings are the same term.
 from __future__ import annotations
 
 import bisect
+import functools
 import re
 import sys
 import unicodedata
@@ -246,6 +247,13 @@ def _reported_starts(normalized: str, patterns: Patterns) -> list[tuple[int, int
     return [(start, index, term) for start, _, index, term in _denied_hits(normalized, patterns)]
 
 
+@functools.lru_cache(maxsize=16384)
+def _normalized(text: str) -> str:
+    """normalize(text), cached: find() looks for each term in the same texts."""
+    return normalize(text)
+
+
+@functools.lru_cache(maxsize=4096)
 def _normalized_pieces(text: str) -> tuple[str, list[int], list[int]]:
     """normalize(text) computed a piece at a time, with the source span of each output character.
 
@@ -280,6 +288,8 @@ def find(text: str, patterns: Patterns) -> list[tuple[int, int, str]]:
     from the whole (for example Hangul jamo), callers verify their result
     with scan_text or scan_json.
     """
+    if not _denied_hits(_normalized(text), patterns):
+        return []  # the usual case, without mapping the text piece by piece
     normalized, starts, ends = _normalized_pieces(text)
     hits = sorted(((s, e, term) for s, e, _, term in _denied_hits(normalized, patterns)),
                   key=lambda h: (h[0], h[0] - h[1]))

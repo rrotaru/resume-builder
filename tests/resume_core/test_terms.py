@@ -357,3 +357,14 @@ def test_replacement_conflicts_name_each_denied_term_in_a_replacement():
         "term 'Contoso'",
         "decisions/terms.json: the replacement for 'Falcon' ('a Contoso-grade falcon tool') contains the denied "
         "term 'Falcon'"]
+
+
+def test_find_maps_a_text_piece_by_piece_only_when_it_matches(monkeypatch):
+    # Mapping each character back is the slow part; the scan looks for every term in every text.
+    mapped = []
+    real = terms._normalized_pieces.__wrapped__
+    monkeypatch.setattr(terms, "_normalized_pieces", lambda text: mapped.append(text) or real(text))
+    patterns = terms.compile_terms(["Falcon"])
+    texts = [f"unrelated text number {n}" for n in range(500)] + ["shipped Falcon"]
+    assert [terms.find(text, patterns) for text in texts][-1] == [(8, 14, "Falcon")]
+    assert mapped == ["shipped Falcon"]
