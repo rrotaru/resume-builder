@@ -16,7 +16,7 @@ A plugin of agent skills that helps a software engineer build a resume from evid
 | Run model | Each run produces a new resume from scratch. Any stage can run on its own against earlier stages' output without re-collecting. Engineer decisions persist across runs. IDs are stable so incremental collection can be added later. |
 | Confidentiality | Dedicated sanitize skill. The engineer approves generalizations, which are stored in `decisions/terms.json`. A script-enforced hard check at render blocks any denylisted term. |
 | Data notice | Before collection, a one-time notice that work data (including performance reviews) is sent to the model provider. The engineer confirms before anything is pulled. |
-| Claim provenance | Strict. Every bullet cites evidence IDs, confirmed metrics, the imported resume, or wizard answers. Render blocks unsourced bullets. The model may suggest metric *types* but never invents values. |
+| Claim provenance | Strict. Every bullet cites evidence IDs, confirmed metrics, the imported resume, or wizard answers. Render blocks unsourced bullets. The model may suggest metric *types* but never invents values: resume-write refuses a bullet with a number its sources do not state. |
 | Metric prompts | Only for the top N projects. `N = min(project_count, clamp(ceil(0.30 × project_count), 3, 8))`, counting projects after exclusions. Percent, floor and cap are configurable. Other projects use the non-numeric XYZ form. |
 | v1 sources | GitHub, GitLab (connector or file export), local git repos (`git log`), Jira (connector or CSV/JSON export), and a folder of exported performance reviews (PDF/DOCX/TXT). |
 | Resume import | PDF, DOCX, TXT, Markdown, JSON Resume. |
@@ -41,8 +41,8 @@ resume-builder/
       schemas/               # JSON Schema per stage file and decisions file
       scripts/               # validate.py, stage.py, check_sources.py, check_terms.py,
                              # check_flags.py, init_workspace.py
-        rcore/               # shared library (ids, schema, stages, checks, profile, documents); imports
-                             # only the standard library, and reads PDF/DOCX only when asked
+        rcore/               # shared library (ids, schema, stages, checks, profile, documents, numbers,
+                             # raw records); imports only the standard library, and reads PDF/DOCX only when asked
     resume-init/
     resume-collect/
       references/            # sources.md: connector queries and export formats
@@ -57,6 +57,7 @@ resume-builder/
     resume-wizard/
       scripts/               # questions.py, answer.py
     resume-write/
+      scripts/               # write.py
     resume-ats/
       scripts/               # ats_lint.py, keywords.py, diff_claims.py
     resume-render/
@@ -175,14 +176,16 @@ All files are JSON or JSONL and validated against `resume-core/schemas`.
 ### Bullet (`06-bullets/bullets.json`, `07-sanitized/bullets.json`)
 
 ```json
-{"id": "b_12", "project_id": "pj_a1b2c3d4", "work_ref": null,
+{"id": "b_12", "project_id": "pj_a1b2c3d4", "work_ref": 0,
  "text": "...", "form": "xyz_quantified",
  "sources": ["ev_3f9a1c2e", "metric:m_3"]}
 ```
 
-- `form`: `xyz_quantified | xyz`
+- `form`: `xyz_quantified` exactly when the bullet cites a metric (`metric:<id>`), which must be a metric of its own project, and its text states the metric's value; otherwise `xyz`.
 - Each `sources` entry is `ev_<id>`, `metric:<id>`, `resume:<json-pointer>` (into `03-profile/profile.json`), or `wizard:<json-pointer>` (into `decisions/profile.json`). A pointer must start with `/` and resolve to a single string or number, never an object, array, boolean or null.
-- Bullets for earlier roles set `work_ref` (index into profile `work`) and cite `resume:` sources.
+- A bullet cites `ev_` only for an item of its own project (`project_id`) or a performance review, and a project bullet cites at least one item of its project. Every number written with digits in its text appears in its sources.
+- **Place.** `work_ref` is the index, in the effective profile's `work`, of the job the bullet goes under. For a project bullet it is a job whose dates overlap the project's months, and null only when no job does (resume-write warns: resume-ats cannot place the bullet until the wizard adds the job). For a bullet from a job's resume lines (a `resume:/work/<i>/…` source requires `work_ref` `i`) or from a performance review, it is that job. So bullets for earlier roles, the jobs no project falls in, set `work_ref` and cite `resume:` sources. A bullet about a profile `projects` entry has `work_ref` null and cites a pointer into `/projects/<i>`, its place. See the [resume-write spec](2026-09-26-resume-write-design.md#placement).
+- IDs are `b_<n>`, assigned by resume-write. A bullet whose text is unchanged since the last run keeps its ID.
 
 ### Decisions
 
@@ -260,7 +263,10 @@ Detailed in the [resume-sanitize spec](2026-09-25-resume-sanitize-design.md).
 Detailed in the [resume-wizard spec](2026-09-25-resume-wizard-design.md). A single session for: metric values for `metric_prompt` projects, missing profile fields (name, contact details, location, links, job dates, education, certificates), and term approvals from `05-terms/candidates.json` and `07-sanitized/new-terms.json`, including a replacement value for any profile fact field that holds a denied term. `questions.py` lists the open questions in a fixed order; `answer.py` records each answer, checked, and writes only to `decisions/`. Profile answers follow the effective-profile rules (arrays of objects merge by index, `{}` keeps an imported entry), and each answer inside an array is anchored to the imported entry it was given for, so the wizard can fix answers that a re-import moved. It also re-links or removes metrics whose project is gone. Skips items already answered or declined in earlier runs.
 
 ### resume-write
-Writes XYZ bullets per project: `xyz_quantified` when a confirmed metric exists, otherwise `xyz`. Writes STAR stories for top-N projects to `06-bullets/stories.md` using the same sources. Earlier roles' bullets come from the imported resume. Every bullet has a non-empty `sources`.
+Detailed in the [resume-write spec](2026-09-26-resume-write-design.md).
+- **Script:** `write.py` begins `06-bullets` and prints the jobs and profile projects with their resume lines, each project (from `projects.json` only) with the job its months fall in, its metrics and evidence, and the performance reviews.
+- **Model:** writes XYZ bullets, `xyz_quantified` when the bullet cites a confirmed metric of its project, otherwise `xyz`, covering every project, every metric and every highlight of the imported resume, so earlier roles' bullets come from it. Writes a STAR story in `06-bullets/stories.md` for each `metric_prompt` project, in rank order, headed by its name, with one line each for Situation, Task, Action and Result, using the same sources. Names are written as the evidence spells them: sanitize apply replaces the denied ones.
+- **Script:** `write.py --commit` checks both (every bullet has sources of its own project, performance reviews or the profile; numbers come from the sources; each bullet has a [place](#bullet-06-bulletsbulletsjson-07-sanitizedbulletsjson); the coverage above; the stories' shape and numbers), assigns IDs and commits. `06-bullets` records `04-projects/projects.json`, `02-evidence/evidence.jsonl`, `01-raw`, `03-profile/profile.json`, `decisions/profile.json` and `decisions/metrics.json`, but never `decisions/terms.json`, so a new metric makes it stale and a term decision does not.
 
 ### resume-ats
 - **General:** selects and orders bullets and projects, normalizes section headings and date formats, and enforces length (1 page under about 8 years of experience, else 2). Keywords come from the target role in `config.json`. Wording changes must stay supported by the cited sources.
@@ -301,6 +307,7 @@ Every checkpoint persists its choices to `decisions/`, so an interrupted run res
 | Orphaned project decisions | Presented at checkpoint 2 to re-link or discard, with the closest current project. `match_projects.py` commits nothing while one remains. |
 | A term replacement that holds a denied term | The wizard refuses to record it. Sanitize apply refuses to run on such a `decisions/terms.json`. |
 | A wizard answer whose imported entry moved | Asked again in the wizard (move, confirm or remove) until resolved. |
+| A bullet citing another project's evidence, or a number its sources do not state | `write.py --commit` refuses it with one line per problem. The draft stays in `06-bullets.tmp/` to fix. |
 | Render check fails | No output files. Failing records listed with the fixing command. |
 
 ## Testing
@@ -332,6 +339,6 @@ Each gets its own spec → plan → implementation cycle, in this order. Progres
 4. **resume-collect:** connector discovery, normalizers, git log, reviews, linking ([spec](2026-09-25-resume-collect-design.md)).
 5. **resume-analyze:** signals, grouping, role and scope, ranking, ID continuity ([spec](2026-09-25-resume-analyze-design.md)).
 6. **resume-sanitize** and **resume-wizard:** term scan and apply, checkpoint 3 ([sanitize spec](2026-09-25-resume-sanitize-design.md), [wizard spec](2026-09-25-resume-wizard-design.md)).
-7. **resume-write:** XYZ bullets and STAR stories.
+7. **resume-write:** XYZ bullets and STAR stories ([spec](2026-09-26-resume-write-design.md)).
 8. **resume-ats:** lint, keywords, per-job tailoring and claim diffing.
 9. **resume-build** and **commands:** orchestration, staleness, checkpoints; plugin manifest and marketplace.

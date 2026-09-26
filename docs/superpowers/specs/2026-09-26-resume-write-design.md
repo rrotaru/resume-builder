@@ -51,7 +51,7 @@ skills/resume-write/
       stories.py           # checks of stories.md
       report.py            # what write.py prints
 skills/resume-core/scripts/rcore/
-  numbers.py               # new: numbers in a text, states_value (moved from resume-wizard)
+  numbers.py               # new: numbers in a text, unsupported, states_value (moved from resume-wizard)
   raw.py                   # new: RawReader, a record's text at raw_ref (moved from resume-sanitize)
 ```
 
@@ -72,7 +72,7 @@ uv run scripts/write.py --workspace WS --commit
 
 ## Pipeline
 
-1. `write.py` reads and validates `04-projects/projects.json` and `02-evidence/evidence.jsonl`, and when they exist `03-profile/profile.json`, `decisions/profile.json` and `decisions/metrics.json`. A missing projects or evidence file names the command that writes it.
+1. `write.py` reads and validates `04-projects/projects.json` and `02-evidence/evidence.jsonl`, and when they exist `03-profile/profile.json`, `decisions/profile.json` and `decisions/metrics.json`. A missing projects or evidence file names the command that writes it, and an invalid input the command that fixes it. It reads each performance review's full text in `01-raw/` for the [number check](#numbers).
 2. It begins `06-bullets` (a fresh `06-bullets.tmp/`, or with `--from-current` a copy of the committed `06-bullets/`) and prints the [material](#what-writepy-prints): the jobs and projects of the profile with their highlights, each project with its job, metrics and evidence, and the performance reviews.
 3. The model reads the material and each performance review's full text in `01-raw/` at its `raw_ref`, and writes `06-bullets.tmp/bullets.json` and `06-bullets.tmp/stories.md`.
 4. `write.py --commit` reads the inputs again, checks the [bullets](#bullets) and the [stories](#stories), assigns [IDs](#ids), writes `bullets.json` back and commits `06-bullets` with its [inputs](#inputs) and `extra` `{"bullets": 4, "quantified": 1, "stories": 1}`.
@@ -121,7 +121,7 @@ The order is the model's: resume-ats chooses the final order. An `id` the model 
 `write.py --commit` stops with one line per problem and a `fix:` line when:
 
 - `bullets.json` is missing, not JSON, or does not match `bullets.schema.json` with `id` optional;
-- a text holds a line break or begins or ends with a space, or two bullets have the same text;
+- a text holds a line break (as `str.splitlines` counts them) or begins or ends with a space, or two bullets have the same text;
 - a bullet has no sources, lists one twice, or cites one that does not resolve (`rcore.sources.source_error`: an unknown evidence or metric ID, or a pointer that is not a single string or number), or a pointer into an `x-` field such as `x-lines`, which is not resume text;
 - `project_id` is not a project in `04-projects/projects.json`;
 - an `ev_` source is neither a performance review nor an item of the bullet's project, or a project bullet cites none of its project's items;
@@ -186,9 +186,19 @@ The model writes `06-bullets.tmp/stories.md`, one story for each project with `m
 
 - `stories.md` is missing or is not UTF-8 text;
 - the first line is not `# Stories`;
-- the `## ` headings are not the `internal_name` of each `metric_prompt` project, in rank order, each once (`stories.md:3: expected '## Project Falcon checkout latency' (rank 1, pj_da2a2b53)`, `stories.md: no story for pj_77e0a1c3 'Ledger export retries' (rank 2)`);
+- the `## ` headings are not the `internal_name` of each `metric_prompt` project, in rank order, each once;
 - a section's lines, ignoring blank ones, are not exactly `- **Situation:** …`, `- **Task:** …`, `- **Action:** …` and `- **Result:** …`, in that order, each with text;
-- a number in a section appears in none of the project's evidence (`title` and `excerpt`), the performance reviews (with their full text) or the project's metrics (`stories.md:8: the number '250' is in none of pj_da2a2b53's evidence, the performance reviews or its metrics`).
+- a number in a section appears in none of the project's evidence (`title` and `excerpt`), the performance reviews (with their full text) or the project's metrics. Stories match projects by position, so under a wrong heading the numbers are checked once the heading is right.
+
+```
+06-bullets.tmp/stories.md:3: expected '## Project Falcon checkout latency' (rank 1, pj_da2a2b53)
+06-bullets.tmp/stories.md:8: the number '250' is in none of pj_da2a2b53's evidence, the performance reviews or its metrics
+06-bullets.tmp/stories.md:11: '## Ledger export retries' is a story too many: stories are only for the 1 project write.py marked 'story'
+06-bullets.tmp/stories.md: no story for pj_77e0a1c3 'Ledger export retries' (rank 2)
+  fix: edit 06-bullets.tmp/stories.md: '# Stories', then for each project write.py marked 'story', in its order, '## <its name>' and one line each for Situation, Task, Action and Result, with only numbers its evidence, the performance reviews or its metrics state (see SKILL.md)
+```
+
+Problems are listed in line order.
 
 With no `metric_prompt` project, `stories.md` is `# Stories` alone. Stories cite no sources line by line, so render checks them for terms only. These checks keep them to the projects and numbers the bullets can prove, and sanitize and the engineer's review at checkpoint 4 do the rest.
 
@@ -204,7 +214,7 @@ For the fixture:
 write: 1 project (1 story), 3 evidence items in projects, 1 performance review, 1 metric; profile: 2 jobs, 1 project
 jobs:
   /work/0  Senior Software Engineer, Northwind Payments  2023-01 to present  projects: pj_da2a2b53
-  /work/1  Software Engineer, Tailspin Toys  2019-06 to 2022-12  no project: its bullets come from the resume
+  /work/1  Software Engineer, Tailspin Toys  2019-06 to 2022-12  projects: none
     resume:/work/1/highlights/0  Migrated the order service from PHP to Go, serving 2M requests per day
 profile projects:
   /projects/0  ledger-lint  2021-04 to present
@@ -214,7 +224,7 @@ projects:
     Idempotency cache that cut checkout latency for Contoso Bank.
     reasons: authored the core PR and owned the epic; customer-facing latency impact
     job: /work/0
-    metric:m_1  p99 checkout latency reduced 40%  (40 %)
+    metric:m_1  p99 checkout latency reduced 40%  (value 40, unit %)
     ev_99a74656  epic, assignee, 2025-02-10  Project Falcon: checkout latency
       Reduce p99 checkout latency for Contoso Bank.
     ev_191cc8ce  pr, author, 2025-03-04  PAY-42: Add Redis idempotency cache for Project Falcon checkout
@@ -226,9 +236,22 @@ performance reviews:
 began 06-bullets.tmp/: write 06-bullets.tmp/bullets.json and 06-bullets.tmp/stories.md, then run write.py --commit
 ```
 
-A job prints its `highlights`, and its `summary` when it has no highlights. A project with an empty summary (a part split off at checkpoint 2) prints `(no summary)`. `warning:` lines come first: a metric whose project is not current (`warning: decisions/metrics.json m_2: pj_1d2c3b4a is not a project in 04-projects/projects.json; the wizard re-links or removes it`), a project in no job, and an unreadable review. Then a `note:` for each `metric_prompt` project without a metric: its bullets use the `xyz` form, and if the engineer has not been through the wizard yet, it should run first.
+A job with `projects: none` is an earlier role. A job prints its `highlights`, or its `summary` when it has none, and a profile project its `highlights`, or its `description`. A project's evidence prints in evidence order, and a project with an empty summary (a part split off at checkpoint 2) prints `(no summary)`. A project overlapping several jobs prints `jobs: /work/0 or /work/2 (it overlaps each; choose one)`, and one overlapping none `job: none in the profile`.
 
-With `--commit`, after the checks pass, each bullet prints as `b_1  pj_da2a2b53 -> /work/0  xyz_quantified  Cut p99 checkout latency 40% …`, then `committed 06-bullets: 4 bullets (1 quantified), 1 story`.
+`warning:` lines come first: no `03-profile/profile.json` (`no jobs or profile projects to put bullets under; run /resume-builder:import`), a metric whose project is not current (`warning: decisions/metrics.json m_2: pj_1d2c3b4a is not a project in 04-projects/projects.json; the wizard re-links or removes it`), a project in no job, and a review whose raw record cannot be read. Then a `note:` for each `metric_prompt` project without a metric: `note: pj_… 'Ledger export retries' has a metric prompt and no metric in decisions/metrics.json: its bullets use the xyz form; if the engineer has not been through the wizard, run /resume-builder:wizard first`.
+
+With `--commit`, after the checks pass, it prints the warnings that still apply (a metric whose project is gone, an unreadable review, and `warning: 2 bullets of pj_… 'Ledger export' (2025-02 to 2025-05) have no place: no job of the profile overlaps it; …` for bullets without a place), then each bullet and story:
+
+```
+  b_1  /work/0  pj_da2a2b53  xyz_quantified  Cut p99 checkout latency 40% for Contoso Bank by building a Redis-backed idempotency cache for Project Falcon in Go
+  b_2  /work/0  xyz  Mentored two new engineers through on-call onboarding
+  b_3  /work/1  xyz  Migrated the order service from PHP to Go, serving 2M requests per day
+  b_4  /projects/0  xyz  Built ledger-lint, an open-source linter for double-entry ledger files with 300 GitHub stars
+  story  pj_da2a2b53  Project Falcon checkout latency
+committed 06-bullets: 4 bullets (1 quantified), 1 story
+```
+
+A bullet without a place prints `no place` where its place would be.
 
 ## `06-bullets/` contents
 
