@@ -3,16 +3,18 @@
 A metric is {id, project_id, value, unit, statement, evidence_ids}. The ID is
 m_<n>, one more than the highest numbered ID. The statement must state the
 value: some number in it, with thousands separators removed, equals the value
-(ignoring its sign). evidence_ids is the project's evidence when the metric was
+(ignoring its sign), by rcore.numbers.states_value, which resume-write also
+applies to bullets. evidence_ids is the project's evidence when the metric was
 recorded; it is used only to suggest a project when the metric's project is gone.
 """
 from __future__ import annotations
 
 import re
 
+from rcore.numbers import states_value  # noqa: F401  (answer.py checks statements with it)
+
 from .common import WizardError, shorten
 
-_NUMBER = re.compile(r"\d[\d,]*(?:\.\d+)?")
 _VALUE = re.compile(r"[+-]?\d+(?:\.\d+)?")
 _NUMBERED = re.compile(r"^m_([0-9]+)$")
 
@@ -28,16 +30,6 @@ def parse_value(text: str):
     if not _VALUE.fullmatch(text):
         raise WizardError(f"the value {text!r} is not a number written as digits, such as 40, -3 or 2.5")
     return int(text) if "." not in text else float(text)
-
-
-def states_value(statement: str, value) -> bool:
-    for token in _NUMBER.findall(statement):
-        try:
-            if float(token.replace(",", "")) == abs(float(value)):
-                return True
-        except ValueError:
-            continue
-    return False
 
 
 def next_id(metrics: list[dict]) -> str:
