@@ -236,6 +236,9 @@ def _metric(workspace: Path, args) -> list[str]:
     projects, metrics = load(workspace, PROJECTS), load(workspace, METRICS, [])
     project = metrics_mod.project(projects, args.project)
     value = metrics_mod.parse_value(args.value)
+    unit = args.unit.strip()
+    if not unit:
+        raise WizardError("the unit is empty; give one, such as %, ms, requests/s or incidents")
     statement = args.statement.strip()
     if not statement:
         raise WizardError("the statement is empty; write one sentence that states the value")
@@ -243,7 +246,7 @@ def _metric(workspace: Path, args) -> list[str]:
         raise WizardError(f"the statement {statement!r} does not state the value {value}; write the number "
                           "in the statement as it is recorded")
     record = {"id": metrics_mod.next_id(metrics), "project_id": project["id"], "value": value,
-              "unit": args.unit.strip(), "statement": statement, "evidence_ids": sorted(project["evidence_ids"])}
+              "unit": unit, "statement": statement, "evidence_ids": sorted(project["evidence_ids"])}
     metrics.append(record)
     check_schema(metrics, "metrics", METRICS)
     save_json(workspace, METRICS, metrics)

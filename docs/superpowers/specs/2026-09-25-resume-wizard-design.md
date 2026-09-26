@@ -193,7 +193,8 @@ After recording, it prints the allowed-term notices and, when a fact field holds
 `answer.py metric PJ --value N --unit UNIT --statement TEXT` adds a metric:
 
 - `PJ` is a project in `04-projects/projects.json`. The wizard asks only about projects with `metric_prompt: true`, but a metric the engineer volunteers for another current project is accepted.
-- `N` is a number. It is stored as an integer when written without a decimal point.
+- `N` is written as digits the way a statement writes it (`40`, `-3`, `2.5`). It is stored as an integer when written without a decimal point. An exponent (`1e6`), thousands separators, `inf` and `nan` are refused, so the value can always be found in the statement.
+- `UNIT` must not be empty (`%`, `ms`, `requests/s`, `incidents`). A metric without one would be incomplete and would silence the project's question.
 - The statement is one sentence that states the value: a number in it, with thousands separators removed, equals `N` (`p99 checkout latency reduced 40%` for 40). This keeps the statement and the value the bullet cites the same number.
 - The ID is `m_<n>`, one more than the highest numbered metric ID.
 - `evidence_ids` stores the project's evidence IDs, sorted.
@@ -249,7 +250,7 @@ Never edit `decisions/` by hand, never invent a metric value or a profile value,
 | Invalid decisions file or input | `questions.py` and `answer.py` exit 1 naming it. `remove-term` still works on a `decisions/terms.json` that the checks reject, as long as it is a JSON list. |
 | A pointer that is not a fact field, an index past the end, a bad date, a denied term in a value | Rejected, file unchanged. |
 | A term decision that would make `terms.json` invalid or a replacement that holds a denied term | Rejected, file unchanged. |
-| A metric statement that does not state its value, an unknown project | Rejected, file unchanged. |
+| A metric statement that does not state its value, a value that is not plain digits, an empty unit, an unknown project | Rejected, file unchanged. |
 | An answer waiting for `move` or `confirm` | Other answers in that entry are rejected until it is resolved. |
 | Missing `04-projects` or `05-terms` | A `note:`. The other questions are still asked. |
 
@@ -260,7 +261,7 @@ Never edit `decisions/` by hand, never invent a metric value or a profile value,
 - **Skips:** a skipped question is not listed; `--all` lists it; a skip inside an entry lapses when the entry changes; only open `profile:` and `metric:` questions can be skipped.
 - **Terms:** a candidate and a new term become questions until decided; replacing an existing decision; `--kind` from the candidate; an allowed term containing a denied one and a replacement holding a denied term are rejected; `remove-term` repairs an invalid file.
 - **Fact fields:** a denied term in a project name is a question; recording a replacement resolves it; a replacement holding a denied term is rejected; a keyword gives a note.
-- **Metrics:** questions only for `metric_prompt` projects; the statement rule; IDs; the evidence snapshot; `metric-gone` with the exclude and merge reasons and the closest project; relink and remove.
+- **Metrics:** questions only for `metric_prompt` projects; the statement rule; values as digits only; an empty unit; IDs; the evidence snapshot; `metric-gone` with the exclude and merge reasons and the closest project; relink and remove.
 - **Profile questions:** each row of the table, including the JSON Resume end-date rule.
 - **CLIs:** exit codes, every file unchanged on error, atomic replacement.
 - **Must promises:** answers follow the overlay rules; a fact field holding a denied term gets a replacement at that path; a moved answer is fixed by the wizard; metrics are asked only for `metric_prompt` projects and re-linked or removed when their project is gone.

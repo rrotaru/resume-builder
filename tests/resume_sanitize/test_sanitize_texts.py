@@ -35,6 +35,15 @@ def test_scan_reads_projects_their_evidence_reviews_and_the_profile(tmp_path):
     assert scan_texts(ws, projects, evidence, None).profile is False
 
 
+def test_an_item_without_an_excerpt_is_read_by_its_title(tmp_path):
+    # excerpt is optional in evidence.schema.json.
+    bare = item(1, "Add Falcon cache")
+    del bare["excerpt"]
+    ws = make_workspace(tmp_path, projects=[project("pj_0000000a", [1])], evidence=[bare])
+    scanned = scan_texts(ws, [project("pj_0000000a", [1])], [bare], None)
+    assert [(t.place, t.text) for t in scanned.texts if t.place == eid(1)] == [(eid(1), "Add Falcon cache")]
+
+
 def test_an_unreadable_review_falls_back_to_its_excerpt(tmp_path):
     ws = workspace_with_review(tmp_path, raw=False)
     from rcore import wsio

@@ -8,24 +8,26 @@ recorded; it is used only to suggest a project when the metric's project is gone
 """
 from __future__ import annotations
 
-import math
 import re
 
 from .common import WizardError, shorten
 
 _NUMBER = re.compile(r"\d[\d,]*(?:\.\d+)?")
+_VALUE = re.compile(r"[+-]?\d+(?:\.\d+)?")
 _NUMBERED = re.compile(r"^m_([0-9]+)$")
 
 
 def parse_value(text: str):
-    """A metric value from the command line: an int when written without a decimal point or exponent."""
-    try:
-        value = float(text)
-    except ValueError:
-        raise WizardError(f"the value {text!r} is not a number") from None
-    if not math.isfinite(value):
-        raise WizardError(f"the value {text!r} is not a finite number")
-    return int(value) if re.fullmatch(r"[+-]?\d+", text.strip()) else value
+    """A metric value from the command line, written as a statement writes it: 40, -3 or 2.5.
+
+    An int when written without a decimal point. Exponents (1e6), thousands
+    separators, inf and nan are refused, so the value can always be found in
+    its statement by states_value.
+    """
+    text = text.strip()
+    if not _VALUE.fullmatch(text):
+        raise WizardError(f"the value {text!r} is not a number written as digits, such as 40, -3 or 2.5")
+    return int(text) if "." not in text else float(text)
 
 
 def states_value(statement: str, value) -> bool:

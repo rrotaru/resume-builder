@@ -87,7 +87,7 @@ The scan reads what resume-write will write about, in this order:
 | Place | Texts |
 |---|---|
 | `pj_…` | Each project in `04-projects/projects.json`, in rank order: `internal_name`, `summary`, each of `rank_reasons` |
-| `ev_…` | In evidence order, each item in a project's `evidence_ids`, and each performance review: `title` and `excerpt`. For a review, also its full text: `text` of the raw record at `raw_ref`, since `excerpt` holds only 500 characters. A raw record that cannot be read gives a `warning:`, and the excerpt stands in. |
+| `ev_…` | In evidence order, each item in a project's `evidence_ids`, and each performance review: `title` and `excerpt` (optional in the evidence schema, so an item without one is read by its title). For a review, also its full text: `text` of the raw record at `raw_ref`, since `excerpt` holds only 500 characters. A raw record that cannot be read gives a `warning:`, and the excerpt stands in. |
 | `resume:<pointer>` | Every string in `03-profile/profile.json` |
 
 Evidence in no project is left out: resume-write cites a project's evidence and performance reviews (roadmap piece 7), and apply's new-term check covers anything else that reaches a bullet. `decisions/profile.json` is left out too: it holds the engineer's own answers, and the wizard checks them against the denied terms. `signals.json` and `groups.json` repeat titles and names from before the engineer's renames, but nothing renders them.

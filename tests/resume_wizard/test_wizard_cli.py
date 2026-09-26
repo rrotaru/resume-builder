@@ -8,6 +8,7 @@ import questions as questions_cli
 from rcore import facts, profile, sources, validation, wsio
 from rrender import gate
 from rwizard import metrics as metrics_mod
+from rwizard.common import WizardError
 
 from wizard_samples import (CONTOSO, NORTHWIND, TAILSPIN, candidate, complete_profile, make_workspace, metric,
                             project, snapshot)
@@ -230,12 +231,22 @@ def test_metrics(tmp_path, capsys):
         rejected(ws, capsys, "metric", "pj_0000dead", "--value", "4", "--unit", "x", "--statement", "4x")
     assert "the value 'lots' is not a number" in \
         rejected(ws, capsys, "metric", "pj_0000000a", "--value", "lots", "--unit", "x", "--statement", "4x")
+    # An exponent would pass as a value but could never be found in the statement.
+    assert "the value '1e6' is not a number written as digits" in \
+        rejected(ws, capsys, "metric", "pj_0000000a", "--value", "1e6", "--unit", "requests", "--statement",
+                 "processed 1e6 requests")
+    # A blank unit would record an incomplete metric and silence the project's metric question.
+    assert "the unit is empty" in \
+        rejected(ws, capsys, "metric", "pj_0000000a", "--value", "4", "--unit", "  ", "--statement", "4x faster")
     assert "m_9 is not in decisions/metrics.json" in rejected(ws, capsys, "remove-metric", "m_9")
 
 
 def test_metric_helpers():
     assert metrics_mod.parse_value("40") == 40 and metrics_mod.parse_value("2.5") == 2.5
-    assert metrics_mod.parse_value("-3") == -3 and metrics_mod.parse_value("1e3") == 1000.0
+    assert metrics_mod.parse_value(" -3 ") == -3 and metrics_mod.parse_value("0.5") == 0.5
+    for text in ("1e6", "1,200", "inf", "nan", ".5", "40%"):
+        with pytest.raises(WizardError, match="is not a number written as digits"):
+            metrics_mod.parse_value(text)
     assert metrics_mod.states_value("cut costs by $1,200,000 a year", 1200000)
     assert metrics_mod.states_value("error rate fell 3.5 points", -3.5)
     assert not metrics_mod.states_value("latency cut 40%", 4)

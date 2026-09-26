@@ -102,7 +102,7 @@ def scan_texts(workspace: Path, projects: list[dict], evidence: list[dict], prof
         if not review and item["id"] not in in_projects:
             continue
         reviews, items = reviews + review, items + (not review)
-        texts += [Text(item["id"], item["title"]), Text(item["id"], item["excerpt"])]
+        texts += [Text(item["id"], item["title"]), Text(item["id"], item.get("excerpt") or "")]
         if review:
             text, why = reader.text(item.get("raw_ref"))
             if text is None:

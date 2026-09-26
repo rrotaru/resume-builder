@@ -307,3 +307,14 @@ def test_apply_commit_refuses_inputs_changed_since_apply(tmp_path, capsys):
     assert "error: 07-sanitized.tmp/bullets.json differs from what the inputs give now: the inputs changed since " \
            "apply.py ran; run apply.py again and review the new text" in capsys.readouterr().err
     assert not (ws / "07-sanitized").exists()
+
+
+def test_scan_reads_evidence_without_an_excerpt(tmp_path, capsys):
+    bare = item(1, "Add Falcon cache for Fabrikam")
+    del bare["excerpt"]  # optional in evidence.schema.json
+    ws = make_workspace(tmp_path, projects=[project("pj_0000000a", [1])], evidence=[bare])
+    assert scan.main(ws_arg(ws)) == 0
+    assert "  name      'Fabrikam'  1 place: ev_00000001\n" in capsys.readouterr().out
+    wsio.write_json(ws / "05-terms.tmp" / "candidates.json", [proposal("Fabrikam", "a retailer", "customer")])
+    assert scan.main([*ws_arg(ws), "--commit"]) == 0
+    assert wsio.read_json(ws / "05-terms" / "candidates.json")[0]["found_in"] == ["ev_00000001"]
