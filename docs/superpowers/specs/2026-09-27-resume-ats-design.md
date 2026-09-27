@@ -199,7 +199,7 @@ A text is flagged for each of these not in its known texts, in the order they ap
 | Claim | What is compared | Reason |
 |---|---|---|
 | A keyword | each keyword of the version's `keywords.json` found in the text | `introduces 'SLO compliance', which no cited source mentions` |
-| A technical term | each word that has a capital letter after its first character (`PostgreSQL`, `gRPC`, `SLO`); mixes letters and digits, other than a number with a unit (`EC2`, `k8s`, `p99`, but not `40ms` or `2M`); holds `+`, `#`, `_` or an inner `.` (`C++`, `Node.js`); or starts with a capital letter and does not start the text or a sentence (`Kafka` in `built on Kafka`). Hyphens split words: `Redis-backed` is `Redis` and `backed` | `introduces 'Kafka', which no cited source mentions` |
+| A technical term | each word that has a capital letter after its first character (`PostgreSQL`, `gRPC`, `SLO`); mixes letters and digits, other than a number with a unit (`EC2`, `k8s`, `p99`, but not `40ms` or `2M`); holds `+`, `#`, `_` or an inner `.` (`C++`, `Node.js`); or starts with a capital letter and does not start the text or a sentence, which ends at `.`, `!` or `?` (`Kafka` in `built on Kafka`). Hyphens split words: `Redis-backed` is `Redis` and `backed` | `introduces 'Kafka', which no cited source mentions` |
 | A number | `rcore.numbers.unsupported`: each number written with digits | `states the number '12', which no cited source states` |
 | A scope word | the words in the table below | `claims 'company-wide', which neither its sources nor its project's role and scope support` |
 

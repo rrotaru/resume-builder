@@ -43,7 +43,7 @@ SCOPE = (
 )
 _WORD = re.compile(r"[\w+#]+(?:\.[\w+#]+)*")
 _DOTTED = re.compile(r"^(?:[^\W\d_]\.)+[^\W\d_]$")  # e.g, i.e: abbreviations, not names
-_SENTENCE_END = ".!?:"
+_SENTENCE_END = ".!?"
 
 
 def _sentence_start(text: str, start: int) -> bool:
