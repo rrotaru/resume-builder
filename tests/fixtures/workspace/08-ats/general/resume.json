@@ -84,16 +84,16 @@
   "education": [
     {
       "institution": "State University",
-      "studyType": "BS",
       "area": "Computer Science",
+      "studyType": "BS",
       "endDate": "2019"
     }
   ],
   "certificates": [
     {
       "name": "AWS Certified Solutions Architect - Associate",
-      "issuer": "Amazon Web Services",
-      "date": "2024-05"
+      "date": "2024-05",
+      "issuer": "Amazon Web Services"
     }
   ],
   "skills": [
