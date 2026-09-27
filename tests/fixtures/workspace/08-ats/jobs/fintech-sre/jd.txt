@@ -1,0 +1,14 @@
+Senior Backend Engineer, Payments Reliability
+Fabrikam Payments (a made-up company)
+
+We are hiring a senior backend engineer to keep our payment APIs fast and dependable.
+
+What you will do
+- Build and run payment services in Go, backed by Redis and PostgreSQL.
+- Own SLO compliance for customer-facing checkout APIs, with clear metrics and alerting.
+- Take part in on-call and help lead incident response and follow-ups.
+- Move our services to Kubernetes.
+
+What you bring
+- 6+ years building backend services.
+- Experience with caching, latency work and high-traffic payment systems.

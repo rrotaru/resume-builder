@@ -42,7 +42,8 @@ resume-builder/
       scripts/               # validate.py, stage.py, check_sources.py, check_terms.py,
                              # check_flags.py, init_workspace.py
         rcore/               # shared library (ids, schema, stages, checks, profile, documents, numbers,
-                             # raw records); imports only the standard library, and reads PDF/DOCX only when asked
+                             # raw records, citations, places); imports only the standard library,
+                             # and reads PDF/DOCX only when asked
     resume-init/
     resume-collect/
       references/            # sources.md: connector queries and export formats
@@ -59,7 +60,7 @@ resume-builder/
     resume-write/
       scripts/               # write.py
     resume-ats/
-      scripts/               # ats_lint.py, keywords.py, diff_claims.py
+      scripts/               # ats.py, ats_lint.py, keywords.py, diff_claims.py
     resume-render/
       scripts/               # render.py
       templates/             # classic.html (v1: one single-column ATS-safe template)
@@ -101,9 +102,9 @@ resume-workspace/
   05-terms/              # resume-sanitize scan: candidates.json
   06-bullets/            # resume-write: bullets.json, stories.md
   07-sanitized/          # resume-sanitize apply: bullets.json, profile.json, stories.md, new-terms.json
-  08-ats/
-    general/             # resume.json, report.json
-    jobs/<slug>/         # jd.txt, resume.json, report.json, flags.json
+  08-ats/                # resume-ats: one folder per version
+    general/             # resume.json, keywords.json, report.json
+    jobs/<slug>/         # jd.txt, resume.json, keywords.json, report.json, flags.json
   out/
     general/             # resume.pdf, resume.docx, resume.txt
     jobs/<slug>/
@@ -217,7 +218,13 @@ JSON Resume restricted to a closed list of sections, validated by `tailored-resu
 - `basics.label`, when present, must equal `config.json` `target_role` or the effective profile's `basics.label`. The source check enforces this for tailored resumes and reports `<file>: basics.label must match the target role in config.json or the profile's label`.
 - Every other field that is not a bullet (name, contact details, employer, title, dates, degree, certificate, skill keywords) is a *fact field* and must be copied from the effective profile. Each entry must match one profile entry field for field; dates may be shortened but not lengthened, and a date the profile entry has cannot be dropped. The source check enforces this, so entries carry no `x-sources`. See the [resume-render spec](2026-09-25-resume-render-design.md#fact-fields).
 
-This is the only input to rendering. `report.json` holds ATS lint results and keyword coverage.
+This is the only input to rendering. resume-ats drafts it with every fact copied from the effective profile and every sanitized bullet under the entry for its [place](#bullet-06-bulletsbulletsjson-07-sanitizedbulletsjson), keeping the bullet's ID as `bullet_id` and its sources; a bullet with no place is left out. See the [resume-ats spec](2026-09-27-resume-ats-design.md).
+
+Beside each version's `resume.json`:
+
+- `keywords.json` (`ats-keywords.schema.json`), written by the model: the target role's keywords for the general resume, the posting's for a job (each found in its `jd.txt`).
+- `report.json` (`ats-report.schema.json`), written by resume-ats: `length` (`experience_months`, `pages`, `estimated_lines`, `line_budget`), `keywords` (each `covered`, `missing_with_evidence` or `missing_without_evidence`, with where), `left_out` (sanitized bullets not used, `no place` or `not selected`) and the lint `warnings`. Lint errors stop the commit.
+- `jd.txt` (jobs only): the posting's text.
 
 `flags.json` (job versions only) is the claim diff's result:
 
@@ -226,7 +233,7 @@ This is the only input to rendering. `report.json` holds ATS lint results and ke
  "flags": [{"bullet_id": "b_1", "text": "...", "text_sha256": "...", "reasons": ["..."]}]}
 ```
 
-`checked` holds the hash of every bullet the claim diff examined, flagged or not; `flags` lists rewrites whose claims are not supported by their sources. `check_flags.py` passes a bullet in the job's `resume.json` only if its current text hash is attested for that job, or it is unflagged and `checked` holds its current hash. A flagged bullet whose hash matches the flag must be accepted, reverted or edited. Any other bullet changed after the claim diff, which must be re-run. A flag or `checked` entry for a bullet no longer in `resume.json`, or a `bullet_id` used twice in one resume, is an error. A `basics.summary` in a job resume goes through the same rules under the id `summary`, so the claim diff must examine it too.
+`checked` holds the hash of every bullet the claim diff examined, flagged or not; `flags` lists rewrites whose claims are not supported by their sources. The claim diff flags each keyword of the version, technical term, number written with digits or scope word (`led`, `cross-team`, `company-wide`) a text holds that its original bullet, its sources (with denied terms replaced) and its entry's facts do not, a scope word also being supported by its project's role or scope ([resume-ats spec](2026-09-27-resume-ats-design.md#claim-diff)). The general resume may have no such claim. `check_flags.py` passes a bullet in the job's `resume.json` only if its current text hash is attested for that job, or it is unflagged and `checked` holds its current hash. A flagged bullet whose hash matches the flag must be accepted, reverted or edited. Any other bullet changed after the claim diff, which must be re-run. A flag or `checked` entry for a bullet no longer in `resume.json`, or a `bullet_id` used twice in one resume, is an error. A `basics.summary` in a job resume goes through the same rules under the id `summary`, so the claim diff must examine it too.
 
 ## Skills
 
@@ -269,9 +276,12 @@ Detailed in the [resume-write spec](2026-09-26-resume-write-design.md).
 - **Script:** `write.py --commit` checks both (every bullet has sources of its own project, performance reviews or the profile; numbers come from the sources; each bullet has a [place](#bullet-06-bulletsbulletsjson-07-sanitizedbulletsjson); the coverage above; the stories' shape and numbers), assigns IDs and commits. `06-bullets` records `04-projects/projects.json`, `02-evidence/evidence.jsonl`, `01-raw`, `03-profile/profile.json`, `decisions/profile.json` and `decisions/metrics.json`, but never `decisions/terms.json`, so a new metric makes it stale and a term decision does not.
 
 ### resume-ats
-- **General:** selects and orders bullets and projects, normalizes section headings and date formats, and enforces length (1 page under about 8 years of experience, else 2). Keywords come from the target role in `config.json`. Wording changes must stay supported by the cited sources.
-- **Per job (`--jd <file>`):** free rewriting against the posting. `diff_claims.py` compares each rewrite with its original bullet and sources, records every examined bullet's text hash in `flags.json` `checked`, and flags any skill, technology, number or scope not present in them. To rebuild one job, begin `08-ats` with `--from-current` and replace only that job's folder. `keywords.py` reports posting terms: covered, missing with evidence, missing without evidence.
-- `ats_lint.py` handles the checks that don't need judgment (headings, dates, no tables or columns in the template).
+Detailed in the [resume-ats spec](2026-09-27-resume-ats-design.md).
+- **Script:** `ats.py` drafts one version at a time into `08-ats.tmp/`, begun as a copy of the committed `08-ats/` so other versions are kept: every fact copied from the effective profile and every bullet of `07-sanitized/bullets.json` (never `06-bullets/`) under the entry for its place. A bullet with no place, and a skill keyword holding a denied term, are left out and reported.
+- **General:** the model selects and orders bullets and entries and rewords within what each bullet's sources say, to fit the length rule (1 page under 96 months of experience, the union of the profile's job dates, else 2, at 50 estimated lines a page). Keywords come from the target role in `config.json`. Section headings and date formats on the page are render's fixed model.
+- **Per job (`--jd <file>`):** free rewriting against the posting, saved as `jd.txt`. The claim diff (`diff_claims.py`, run again by the commit) records every examined bullet's and the summary's text hash in `flags.json` `checked` and flags any keyword, technology, number or scope not present in the bullet's original, its sources or its entry. `--revise` begins a draft without redrafting, for checkpoint 4 to revert or edit a bullet.
+- `keywords.py` reports each keyword: covered, missing with evidence, missing without evidence. A keyword enters `skills` only through the wizard. `ats_lint.py` checks bullet shape and characters, duplicates, contact details, dates and the length estimate.
+- **Script:** `ats.py --commit` checks every version (files, keywords, schema, the source check with fact fields, the terms check, placement, the general resume's claims, lint), writes `report.json` and each `flags.json`, and commits `08-ats`. It records the sanitized bullets and profile, the profile and the wizard's answers, the term decisions, metrics, projects, evidence, `01-raw` and `config.json`, never `decisions/attestations.json`, so attesting at checkpoint 4 leaves it fresh.
 
 ### resume-render
 Detailed in the [resume-render spec](2026-09-25-resume-render-design.md).
@@ -308,6 +318,7 @@ Every checkpoint persists its choices to `decisions/`, so an interrupted run res
 | A term replacement that holds a denied term | The wizard refuses to record it. Sanitize apply refuses to run on such a `decisions/terms.json`. |
 | A wizard answer whose imported entry moved | Asked again in the wizard (move, confirm or remove) until resolved. |
 | A bullet citing another project's evidence, or a number its sources do not state | `write.py --commit` refuses it with one line per problem. The draft stays in `06-bullets.tmp/` to fix. |
+| A tailored resume with a retyped fact, a misplaced bullet, a claim in the general resume or a lint error | `ats.py --commit` refuses it with one line per problem. The draft stays in `08-ats.tmp/` to fix. A job's claims are flagged instead, for checkpoint 4. |
 | Render check fails | No output files. Failing records listed with the fixing command. |
 
 ## Testing
@@ -340,5 +351,5 @@ Each gets its own spec → plan → implementation cycle, in this order. Progres
 5. **resume-analyze:** signals, grouping, role and scope, ranking, ID continuity ([spec](2026-09-25-resume-analyze-design.md)).
 6. **resume-sanitize** and **resume-wizard:** term scan and apply, checkpoint 3 ([sanitize spec](2026-09-25-resume-sanitize-design.md), [wizard spec](2026-09-25-resume-wizard-design.md)).
 7. **resume-write:** XYZ bullets and STAR stories ([spec](2026-09-26-resume-write-design.md)).
-8. **resume-ats:** lint, keywords, per-job tailoring and claim diffing.
+8. **resume-ats:** lint, keywords, per-job tailoring and claim diffing ([spec](2026-09-27-resume-ats-design.md)).
 9. **resume-build** and **commands:** orchestration, staleness, checkpoints; plugin manifest and marketplace.

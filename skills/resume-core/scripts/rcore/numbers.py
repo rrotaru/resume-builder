@@ -20,13 +20,18 @@ from decimal import Decimal
 _NUMBER = re.compile(r"\d[\d,]*(?:\.\d+)?")
 
 
-def numbers(text: str) -> list[tuple[str, Decimal]]:
-    """Each number in text, in order, as (how it is written, its exact value)."""
+def spans(text: str) -> list[tuple[int, int, str, Decimal]]:
+    """Each number in text, in order, as (start, end, how it is written, its exact value)."""
     found = []
     for match in _NUMBER.finditer(text):
         written = match.group().rstrip(",")
-        found.append((written, Decimal(written.replace(",", ""))))
+        found.append((match.start(), match.start() + len(written), written, Decimal(written.replace(",", ""))))
     return found
+
+
+def numbers(text: str) -> list[tuple[str, Decimal]]:
+    """Each number in text, in order, as (how it is written, its exact value)."""
+    return [(written, value) for _, _, written, value in spans(text)]
 
 
 def values(text: str) -> set[Decimal]:

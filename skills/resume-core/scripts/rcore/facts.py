@@ -63,6 +63,12 @@ def _differences(entry: dict, candidate: dict) -> list[tuple]:
     return found
 
 
+def matches(entry: dict, candidate: dict) -> bool:
+    """True when a tailored entry copies the profile entry candidate: every fact field it has,
+    candidate has with the same value (a date may be shortened), and it has each date candidate has."""
+    return isinstance(entry, dict) and isinstance(candidate, dict) and not _differences(entry, candidate)
+
+
 def _describe(kind: str, field: str, value, profile_value, where: str, closest: str) -> str:
     if kind == "keyword":
         return f"{where}: keyword {value!r} is not in the profile (closest entry {closest})"

@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ATS report for a version (08-ats/general/report.json, 08-ats/jobs/<slug>/report.json)",
+  "description": "Written by resume-ats's commit: the length rule and estimate, the coverage of each keyword in keywords.json, the sanitized bullets this version leaves out, and the lint warnings. Lint errors stop the commit, so none are recorded.",
+  "type": "object",
+  "required": ["length", "keywords", "left_out", "warnings"],
+  "additionalProperties": false,
+  "properties": {
+    "length": {
+      "type": "object",
+      "required": ["experience_months", "pages", "estimated_lines", "line_budget"],
+      "additionalProperties": false,
+      "properties": {
+        "experience_months": {"type": "integer", "minimum": 0},
+        "pages": {"enum": [1, 2]},
+        "estimated_lines": {"type": "integer", "minimum": 0},
+        "line_budget": {"type": "integer", "minimum": 1}
+      }
+    },
+    "keywords": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["keyword", "status", "where"],
+        "additionalProperties": false,
+        "properties": {
+          "keyword": {"type": "string", "minLength": 1},
+          "status": {"enum": ["covered", "missing_with_evidence", "missing_without_evidence"]},
+          "where": {"type": "array", "items": {"type": "string", "minLength": 1}}
+        }
+      }
+    },
+    "left_out": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["bullet_id", "reason"],
+        "additionalProperties": false,
+        "properties": {
+          "bullet_id": {"type": "string", "pattern": "^b_[A-Za-z0-9_-]+$"},
+          "reason": {"enum": ["no place", "not selected"]}
+        }
+      }
+    },
+    "warnings": {"type": "array", "items": {"type": "string", "minLength": 1}}
+  }
+}

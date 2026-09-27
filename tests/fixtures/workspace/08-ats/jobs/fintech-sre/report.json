@@ -1,0 +1,67 @@
+{
+  "length": {
+    "experience_months": 88,
+    "pages": 1,
+    "estimated_lines": 36,
+    "line_budget": 50
+  },
+  "keywords": [
+    {
+      "keyword": "Go",
+      "status": "covered",
+      "where": [
+        "/work/0/x-highlights/0/text",
+        "/work/1/x-highlights/0/text",
+        "/skills/0/keywords/0"
+      ]
+    },
+    {
+      "keyword": "Redis",
+      "status": "covered",
+      "where": [
+        "/work/0/x-highlights/0/text",
+        "/skills/0/keywords/2"
+      ]
+    },
+    {
+      "keyword": "PostgreSQL",
+      "status": "covered",
+      "where": [
+        "/skills/0/keywords/3"
+      ]
+    },
+    {
+      "keyword": "SLO compliance",
+      "status": "covered",
+      "where": [
+        "/work/0/x-highlights/0/text"
+      ]
+    },
+    {
+      "keyword": "on-call",
+      "status": "covered",
+      "where": [
+        "/work/0/x-highlights/1/text"
+      ]
+    },
+    {
+      "keyword": "metrics",
+      "status": "missing_with_evidence",
+      "where": [
+        "ev_56410ed1"
+      ]
+    },
+    {
+      "keyword": "Kubernetes",
+      "status": "missing_without_evidence",
+      "where": []
+    },
+    {
+      "keyword": "incident response",
+      "status": "missing_without_evidence",
+      "where": []
+    }
+  ],
+  "left_out": [],
+  "warnings": []
+}
