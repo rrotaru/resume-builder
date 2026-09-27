@@ -131,6 +131,7 @@ def _job(args, workspace: Path) -> tuple[Version, str | None]:
 
 def _draft(args, workspace: Path) -> int:
     what = "nothing drafted"
+    stale = report.stale_warnings(workspace)  # stages.status also restores an interrupted commit
     try:
         inputs = load_inputs(workspace)
         found = material.build(workspace, inputs)
@@ -154,7 +155,7 @@ def _draft(args, workspace: Path) -> int:
     resume = draft.build(found)
     wsio.write_json(folder / RESUME, resume)
 
-    for line in report.stale_warnings(workspace) + report.homeless_warnings(found) + \
+    for line in stale + report.homeless_warnings(found) + \
             report.denied_fact_warnings(found):
         print(f"warning: {line}")
     for line in report.withheld_notes(found):
@@ -180,6 +181,7 @@ def _draft(args, workspace: Path) -> int:
 
 def _revise(args, workspace: Path) -> int:
     what = "nothing begun"
+    stages.status(workspace)  # restores an interrupted commit
     try:
         target = version(args.revise)
         inputs = load_inputs(workspace)
@@ -210,6 +212,7 @@ def _revise(args, workspace: Path) -> int:
 
 def _remove(args, workspace: Path) -> int:
     what = "nothing removed"
+    stages.status(workspace)  # restores an interrupted commit
     try:
         target = version(args.remove)
         if not target.is_job:

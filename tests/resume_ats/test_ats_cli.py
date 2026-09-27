@@ -443,7 +443,6 @@ def test_a_fact_holding_a_denied_term_needs_the_wizard(workspace, capsys):
 
 def test_an_interrupted_commit_is_restored_before_drafting(workspace, capsys):
     (workspace / "08-ats").rename(workspace / "08-ats.old")
-    assert run(ats, workspace, "--job", "fintech-sre") == 1  # the saved posting is in 08-ats.old/ until restored
-    assert run(ats, workspace) == 0
+    assert run(ats, workspace, "--job", "fintech-sre") == 0  # its saved posting is found once restored
     assert "(a copy of the committed 08-ats/ with general, fintech-sre)" in capsys.readouterr().out
     assert (workspace / "08-ats" / "jobs" / "fintech-sre" / "jd.txt").is_file()
