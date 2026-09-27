@@ -15,7 +15,7 @@ from __future__ import annotations
 import copy
 import re
 
-from rcore import numbers, schema, sources
+from rcore import numbers, places, schema, sources
 
 from .common import DRAFT, shorten
 from .material import Material, is_review, pointer_place, project_span, x_field
@@ -37,13 +37,8 @@ def draft_schema() -> dict:
 
 def place(bullet: dict) -> str | None:
     """Where a checked bullet goes: '/work/0', '/projects/0', or None when it has no place."""
-    if bullet["work_ref"] is not None:
-        return f"/work/{bullet['work_ref']}"
-    for ref in bullet["sources"]:
-        found = pointer_place(ref)
-        if found and found[0] == "projects":
-            return f"/projects/{found[1]}"
-    return None
+    found = places.place(bullet)
+    return f"/{found[0]}/{found[1]}" if found else None
 
 
 def _source_problems(where: str, bullet: dict, material: Material) -> list[str]:

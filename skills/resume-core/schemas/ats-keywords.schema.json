@@ -1,0 +1,7 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "A version's keywords (08-ats/general/keywords.json, 08-ats/jobs/<slug>/keywords.json)",
+  "description": "Written by the model: the target role's keywords for the general resume, or a job posting's, spelled as the role's postings or the posting spell them. resume-ats's commit checks that none is listed twice and that each of a job's keywords appears in its jd.txt.",
+  "type": "array",
+  "items": {"type": "string", "pattern": "^\\S(.*\\S)?$"}
+}

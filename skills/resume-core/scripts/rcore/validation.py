@@ -33,7 +33,11 @@ FILE_SCHEMAS: list[tuple[str, str, str]] = [
     ("07-sanitized/profile.json", "resume", "json"),
     ("07-sanitized/new-terms.json", "term-candidates", "json"),
     ("08-ats/general/resume.json", "tailored-resume", "json"),
+    ("08-ats/general/keywords.json", "ats-keywords", "json"),
+    ("08-ats/general/report.json", "ats-report", "json"),
     ("08-ats/jobs/*/resume.json", "tailored-resume", "json"),
+    ("08-ats/jobs/*/keywords.json", "ats-keywords", "json"),
+    ("08-ats/jobs/*/report.json", "ats-report", "json"),
     ("08-ats/jobs/*/flags.json", "flags", "json"),
 ]
 

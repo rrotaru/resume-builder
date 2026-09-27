@@ -6,26 +6,28 @@
   a missing endDate means the job is ongoing. A job overlaps a project when
   neither ends before the other starts, by the project's start and end months.
 - Projects come from 04-projects/projects.json only, in rank order.
-- Source texts are what a source reference says, for the number check: an
-  evidence item's title and excerpt, and for a performance review also its
-  full text in 01-raw/; a metric's value and statement; a pointer's value.
-- A pointer's place is the profile entry it points into: resume:/work/1/...
-  is in /work/1, resume:/projects/0/... in /projects/0.
+- Source texts are what a source reference says, for the number check
+  (rcore.citations): an evidence item's title and excerpt, and for a
+  performance review also its full text in 01-raw/; a metric's value and
+  statement; a pointer's value.
+- A pointer's place is the profile entry it points into (rcore.places):
+  resume:/work/1/... is in /work/1, resume:/projects/0/... in /projects/0.
 """
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
 from pathlib import Path
 
-from rcore import numbers, sources, wsio
+from rcore import numbers, sources
+from rcore.citations import Citations, is_review
+from rcore.places import pointer_place
 from rcore.profile import is_date
-from rcore.raw import RawReader
 
 from .common import Inputs
 
+__all__ = ["Material", "build", "is_review", "pointer_place"]
+
 OPEN_START, ONGOING = (0, 0), (9999, 99)
-_PLACE = re.compile(r"^(?:resume|wizard):/(work|projects)/(0|[1-9][0-9]*)(?:/|$)")
 
 
 def month(value, end: bool = False) -> tuple[int, int] | None:
@@ -64,22 +66,12 @@ def project_span(project: dict) -> str:
     return f"{project['start']} to {project['end'] or 'present'}"
 
 
-def pointer_place(ref: str) -> tuple[str, int] | None:
-    """('work', 1) for resume:/work/1/highlights/0, ('projects', 0) for a profile project; else None."""
-    match = _PLACE.match(ref)
-    return (match.group(1), int(match.group(2))) if match else None
-
-
 def x_field(ref: str) -> str | None:
     """The x- field a resume: or wizard: pointer goes through (x-lines), if any."""
     for prefix in ("resume:", "wizard:"):
         if ref.startswith(prefix):
             return next((t for t in ref[len(prefix):].split("/") if t.startswith("x-")), None)
     return None
-
-
-def is_review(item: dict) -> bool:
-    return item["kind"] == "perf_review"
 
 
 @dataclass
@@ -93,8 +85,16 @@ class Material:
     jobs: list[dict]  # the effective profile's work entries
     profile_projects: list[dict]  # the effective profile's projects entries
     known: sources.KnownSources
-    texts: dict[str, list[str]]  # evidence ID -> its texts
-    raw_warnings: list[str]
+    citations: Citations
+
+    @property
+    def texts(self) -> dict[str, list[str]]:
+        """Evidence ID -> its texts (title, excerpt, and a review's full text)."""
+        return self.citations.evidence
+
+    @property
+    def raw_warnings(self) -> list[str]:
+        return self.citations.warnings
 
     @property
     def metrics(self) -> list[dict]:
@@ -122,21 +122,7 @@ class Material:
 
     def source_texts(self, ref: str) -> list[str]:
         """What a source reference says, for the number check; [] when it does not resolve."""
-        if ref.startswith("ev_"):
-            return self.texts.get(ref, [])
-        if ref.startswith("metric:"):
-            metric = self.metric(ref[len("metric:"):])
-            return [numbers.digits(metric["value"]), metric["statement"]] if metric else []
-        for prefix, doc in (("resume:", self.known.profile), ("wizard:", self.known.wizard)):
-            if ref.startswith(prefix):
-                try:
-                    value = wsio.resolve_pointer(doc, ref[len(prefix):])
-                except KeyError:
-                    return []
-                if isinstance(value, bool) or not isinstance(value, (str, int, float)):
-                    return []
-                return [value if isinstance(value, str) else numbers.digits(value)]
-        return []
+        return self.citations.texts(ref)
 
     def story_texts(self, project: dict) -> list[str]:
         """What a project's story may draw numbers from: its evidence, the reviews, its metrics."""
@@ -182,19 +168,6 @@ def _entries(doc: dict, section: str) -> list[dict]:
 def build(workspace: Path, inputs: Inputs) -> Material:
     projects = sorted(inputs.projects, key=lambda p: p["rank"])
     effective = inputs.effective
-    reader, texts, warnings = RawReader(workspace), {}, []
-    for item in inputs.evidence:
-        found = [item["title"], item.get("excerpt") or ""]
-        if is_review(item) and item.get("raw_ref") is None:
-            warnings.append(f"{item['id']}: has no raw_ref; its excerpt stands in for the review's text")
-        elif is_review(item):
-            text, why = reader.text(item["raw_ref"])
-            if text is None:
-                warnings.append(f"{item['id']}: the raw record {item['raw_ref']} {why}; "
-                                "its excerpt stands in for the review's text")
-            else:
-                found.append(text)
-        texts[item["id"]] = found
     known = sources.KnownSources(evidence_ids={e["id"] for e in inputs.evidence},
                                  metric_ids={m["id"] for m in inputs.metrics},
                                  profile=inputs.profile or {}, wizard=inputs.wizard)
@@ -204,4 +177,4 @@ def build(workspace: Path, inputs: Inputs) -> Material:
         reviews=[e for e in inputs.evidence if is_review(e)],
         owner={e: p["id"] for p in projects for e in p["evidence_ids"]},
         jobs=_entries(effective, "work"), profile_projects=_entries(effective, "projects"),
-        known=known, texts=texts, raw_warnings=warnings)
+        known=known, citations=Citations(workspace, inputs.evidence, inputs.metrics, inputs.profile, inputs.wizard))
