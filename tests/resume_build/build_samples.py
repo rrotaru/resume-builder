@@ -24,6 +24,7 @@ import ingest_export
 import ingest_reviews
 import link
 import match_projects
+import pytest
 import scan
 import signals
 import write
@@ -215,3 +216,27 @@ def first_run(root: Path, check=lambda label: None) -> Path:
     assert run(attest, workspace, "accept", "fintech-sre", "b_1") == 0  # checkpoint 4
     check("attested")
     return workspace
+
+
+# A first run, built once per test module and copied for each test ----------------------------
+
+def build_once(tmp_path_factory) -> Path:
+    """The root of a first run (root/ws, root/engineer), for a module-scoped fixture."""
+    with pytest.MonkeyPatch.context() as patch:
+        fix_time(patch)
+        root = tmp_path_factory.mktemp("first-run")
+        first_run(root)
+    return root
+
+
+def copy_of(root: Path, tmp_path: Path, monkeypatch) -> Path:
+    """A copy of a first run's workspace. Its config.json still names the run's engineer/ files: leave them as they
+    are."""
+    fix_time(monkeypatch)
+    shutil.copytree(root / "ws", tmp_path / "ws")
+    return tmp_path / "ws"
+
+
+def survey(workspace) -> dict:
+    """Each step by name."""
+    return {step.name: step for step in steps.survey(workspace)}
