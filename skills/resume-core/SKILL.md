@@ -39,7 +39,7 @@ resume-workspace/
    To record facts about the run, such as skipped rows, add `--extra '{"skipped_rows": 3}'` (a JSON object, stored as `extra` in `_stage.json`).
 4. If commit prints errors, fix the named records and commit again. The previous output stays in place until a commit succeeds. Never skip or weaken a check.
 
-`stage.py --workspace WS status` prints each stage as `missing`, `fresh` or `stale`. Before reading a stale stage, tell the engineer and offer to rebuild it.
+`stage.py --workspace WS status` prints each stage as `missing`, `fresh` or `stale`. Before reading a stale stage, tell the engineer and offer to rebuild it. `stages.stale_inputs(workspace)` names, for each committed stage, the recorded inputs that make it stale (`changed`, `missing`, or in a stage that is itself `stale`); resume-build's `progress.py` prints them.
 If a commit was interrupted mid-swap, the next `begin`, `commit` or `status` restores the previous output from `<stage>.old/`.
 
 ## Source references
@@ -83,7 +83,7 @@ A tailored resume's fact fields must match it:
 
 A confidential term in a fact field (for example a codename used as a project name) is fixed with a wizard answer at that path in `decisions/profile.json`, never by rewording the tailored resume. A keyword cannot be replaced that way (keywords combine), so a keyword holding a denied term is left out of the tailored resume.
 
-Only resume-wizard's `answer.py` writes `decisions/profile.json`, `decisions/terms.json` and `decisions/metrics.json`. It writes profile answers under the rules above (facts only, `{}` padding, an index at most one past the end) and anchors each one to the imported entry it was given for, so a re-import that moves the entry becomes a wizard question.
+Only resume-wizard's `answer.py` writes `decisions/profile.json`, `decisions/terms.json` and `decisions/metrics.json`. Only resume-analyze's `decide.py` writes `decisions/projects.json`, and only resume-build's `attest.py` writes `decisions/attestations.json`. It writes profile answers under the rules above (facts only, `{}` padding, an index at most one past the end) and anchors each one to the imported entry it was given for, so a re-import that moves the entry becomes a wizard question.
 
 ## Checks
 
@@ -117,6 +117,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "resume-core" / "sc
 from rcore import ids, stages, wsio  # noqa: E402
 ```
 
+`stages.begin / commit / status`, `stages.stale_inputs(workspace)` (why each stage is stale),
 `ids.evidence_id(source, native_key)`, `ids.assign_evidence_ids(keys)`, `ids.project_id(evidence_ids)`,
 `ids.text_sha256(text)`, `config.metric_prompt_count(n, percent, minimum, maximum)`,
 `config.resolve_path(workspace, value)` (a relative path in `config.json` is relative to the workspace),

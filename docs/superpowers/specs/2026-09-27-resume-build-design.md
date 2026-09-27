@@ -76,7 +76,7 @@ uv run scripts/attest.py --workspace WS list
 | Script | Exit | Meaning |
 |---|---|---|
 | `progress.py` | 0 | The steps and the next one printed |
-| | 1 | Error: an invalid `config.json`, `03-profile/source.json`, `decisions/terms.json` or `decisions/attestations.json`, or a committed job version that does not validate. The line names it and what fixes it. |
+| | 1 | Error: an input that does not validate (`config.json`, `03-profile/source.json`, `decisions/terms.json`, `decisions/attestations.json`, `07-sanitized/new-terms.json`, a committed job version). The lines name it and what writes it. |
 | `final_review.py` | 0 | The review printed, with or without open items |
 | | 1 | Error: no committed `08-ats`, or an invalid input as above |
 | `attest.py` | 0 | Recorded, withdrawn, listed, or nothing to change (said so) |
@@ -122,41 +122,45 @@ The collect step's stage is `02-evidence`, with `01-raw` behind it. A draft wins
 
 ## Next step
 
-The next step is the first step, in order, that is not `done`, `fresh` or `none`, skipping the wizard. For review it is `ready` only when render is also fresh; otherwise review (then render) is next. When that step is write, apply or ats and it is not a draft, checkpoint 3 comes first: `next: wizard: checkpoint 3 until questions.py prints 'wizard: no open questions' (resume-wizard); then <the step>`. The wizard can have questions whatever the stages say (a new candidate term, a skipped metric the engineer now has), and asking an empty wizard costs one command.
+The next step is the first step, in order, that is not `done`, `fresh` or `none`, skipping the wizard. Review is skipped when it is `ready` and render is fresh; render itself always comes through review, so checkpoint 4 is never skipped before a render. When that step is write, apply or ats and it is not a draft, checkpoint 3 comes first: `next: wizard: checkpoint 3 until questions.py prints 'wizard: no open questions' (resume-wizard); then <the step>`. The wizard can have questions whatever the stages say (a new candidate term, a skipped metric the engineer now has), and asking an empty wizard costs one command.
 
 Each state and cause has one command, named in the owning skill's terms:
 
 | Step | State and cause | Next |
 |---|---|---|
-| init | missing | create the workspace and `config.json` (resume-init) |
-| collect | draft with a `<source>.partial.jsonl` | continue the paused fetch (resume-collect step 5); never run `stage.py begin 01-raw`, which deletes it |
-| collect | draft | continue the collection in `01-raw.tmp/` (resume-collect steps 5 to 8); never run `stage.py begin 01-raw` |
+| init | missing: no `config.json` | create the workspace and `config.json` (resume-init) |
+| init | missing: a `decisions/` file | run resume-init again: `init_workspace.py` creates only what is missing |
+| collect | draft holding a `<source>.partial.jsonl` | continue the paused fetch in `01-raw.tmp/` (resume-collect step 5); never run `stage.py begin 01-raw`, which deletes it |
+| collect | draft | continue the collection in `01-raw.tmp/` (resume-collect steps 5 to 8); never run `stage.py begin 01-raw`, which deletes it |
 | collect | missing, with `01-raw` committed | `link.py` builds `02-evidence` from the committed `01-raw` (resume-collect step 8) |
 | collect | missing | checkpoint 1: confirm the sources and collect (resume-collect) |
 | collect | stale | `01-raw` changed since `02-evidence` was built: `link.py` (resume-collect step 8) |
-| import | draft holding `profile.json` | `check_profile.py --commit` (resume-import step 5) |
-| import | draft | map `03-profile.tmp/resume.txt` into `profile.json`, then `check_profile.py --commit` (resume-import steps 4 and 5) |
-| import | missing | import the resume `config.json` names (resume-import) |
-| import | changed | import it again (resume-import); wizard answers that the new import moves become `moved:` questions |
-| analyze | draft holding `groups.json` | checkpoint 2 is in progress: `match_projects.py` (resume-analyze step 5) |
-| analyze | draft | group the evidence into `04-projects.tmp/groups.json` (resume-analyze step 3) |
-| analyze | missing | checkpoint 2 (resume-analyze) |
+| import | draft holding `profile.json` | check and commit it with `check_profile.py --commit` (resume-import step 5) |
+| import | draft holding `resume.txt` | map `03-profile.tmp/resume.txt` into `profile.json`, then `check_profile.py --commit` (resume-import steps 4 and 5) |
+| import | draft, empty | run `extract_text.py` again (resume-import) |
+| import | missing | import `<the file config.json names>` (resume-import), or, when it is not found, ask the engineer for the resume |
+| import | changed | import it again (resume-import); wizard answers the new import moves become `moved:` questions (resume-wizard) |
+| analyze | draft holding `groups.json` | continue checkpoint 2 with `match_projects.py` (resume-analyze step 5) |
+| analyze | draft holding `signals.json` | group the evidence into `04-projects.tmp/groups.json` (resume-analyze step 3) |
+| analyze | draft, empty | run `signals.py` again (resume-analyze step 2) |
+| analyze | missing | checkpoint 2: find and review the projects (resume-analyze) |
 | analyze | stale: only `decisions/projects.json` or `config.json` | apply it to the committed grouping: `stage.py begin 04-projects --from-current`, then `match_projects.py` (resume-analyze step 5) |
 | analyze | stale: anything else | the evidence changed: group again with `signals.py`, starting from the last `groups.json` (resume-analyze) |
-| scan | draft holding `candidates.json` | `scan.py --commit` (resume-sanitize scan step 5) |
-| scan | draft, missing or stale | `scan.py` (resume-sanitize scan) |
+| scan | draft holding `candidates.json` | `scan.py --commit` (resume-sanitize, scan step 5) |
+| scan | draft | `scan.py` again (resume-sanitize, scan) |
+| scan | missing or stale | `scan.py` (resume-sanitize, scan) |
 | write | draft holding `bullets.json` | `write.py --commit` (resume-write step 6) |
-| write | draft, missing | `write.py`, with `--from-current` when `06-bullets` is committed (resume-write) |
-| write | stale: only `decisions/profile.json` or `decisions/metrics.json` | a wizard answer: recommit with `write.py --from-current`, then `write.py --commit`; bullets that still pass keep their IDs, and a new metric needs a bullet that cites it |
+| write | draft | `write.py` again, with `--from-current` when `06-bullets` is committed, then `write.py --commit` (resume-write) |
+| write | missing | write the bullets and stories: `write.py`, then `write.py --commit` (resume-write) |
+| write | stale: only `decisions/profile.json` or `decisions/metrics.json` | a wizard answer: recommit the bullets with `write.py --from-current`, then `write.py --commit`; bullets that still pass keep their IDs, and a new metric needs a bullet that cites it (resume-write) |
 | write | stale: anything else | revise the bullets: `write.py --from-current`, then `write.py --commit` (resume-write) |
-| apply | draft holding `new-terms.json` | `apply.py --commit`; if it says the inputs changed, `apply.py` again (resume-sanitize apply step 5) |
-| apply | draft, missing or stale | `apply.py`, then `apply.py --commit` (resume-sanitize apply) |
+| apply | draft holding `new-terms.json` | `apply.py --commit`; if it says the inputs changed, `apply.py` again (resume-sanitize, apply step 5) |
+| apply | draft, missing or stale | `apply.py`, then `apply.py --commit` (resume-sanitize, apply) |
 | ats | draft | continue with `ats.py --commit`, or start over from the committed stage with `stage.py begin 08-ats --from-current` (resume-ats) |
 | ats | missing | draft and commit the general resume, then each posting (resume-ats) |
 | ats | stale | re-check every version: `stage.py begin 08-ats --from-current`, then `ats.py --commit`; redraft a version it refuses (`ats.py`, `ats.py --job SLUG`) or remove it (`ats.py --remove SLUG`) (resume-ats) |
 | review | open | checkpoint 4: `final_review.py` lists the open items |
-| review | ready, render not fresh | checkpoint 4 (`final_review.py`), then render (resume-render) |
-| render | missing or stale | render (resume-render) |
+| review | ready, render missing or stale | checkpoint 4 (`final_review.py`), then render (resume-render) |
 | none | | every stage is fresh and `out/` holds the resumes; for another posting, `ats.py --jd FILE` (resume-ats), then checkpoint 4 and render |
 
 A draft that another step's draft or stale stage comes before still waits: `progress.py` shows it in its row, and the step that owns it continues it when its turn comes. Rebuilding an earlier stage never deletes a later draft, except where that step's own command does (`signals.py`, `scan.py`, `write.py` and `apply.py` without `--commit` begin a fresh draft).
@@ -165,7 +169,7 @@ A draft that another step's draft or stale stage comes before still waits: `prog
 
 `01-raw` and `03-profile` record no inputs, so `stage.py status` calls them fresh as soon as they exist.
 
-- **Collect.** The note gives the items per source from `02-evidence/_stage.json` `extra` and the date it was built (`created_at`), with its age in days. When `config.json` `time_range.end` is null, or later than that date, it adds `the time range is open, so work since then is not in it`, and the skill asks whether to collect again. A change to `config.json` (a username, a repository, the time range) is not visible here: the skill collects again when the engineer changes one.
+- **Collect.** The note gives the items per source from `02-evidence/_stage.json` `extra` and the date it was built (`created_at`), with its age in days. When it was built before today and `config.json` `time_range.end` is null, it adds `the time range is open, so work since then is not in it`; when the range ends after the build date, `the time range ends <end>, so work since then is not in it`. The skill then asks whether to collect again. A change to `config.json` (a username, a repository, the time range) is not visible here: the skill collects again when the engineer changes one.
 - **Import.** For a committed `03-profile`:
   - `config.json` `resume_path` null: `fresh`, noting that `config.json` names no resume.
   - `rcore.config.resolve_path(workspace, resume_path)` differs from `source.json` `path`: `changed`, `config.json names <path>, not the imported <path>`.
@@ -262,8 +266,8 @@ With open items, they come before the last line:
 
 ```
 open items: 2
-  new term 'Fabrikam': decide it with the wizard, then run sanitize apply and ats again
-  fintech-sre b_1 is flagged: accept it (attest.py accept fintech-sre b_1), or revert or edit it (ats.py --revise fintech-sre)
+  new term 'Fabrikam': decide it with the wizard (resume-wizard), then run sanitize apply and ats again
+  fintech-sre b_1 is flagged: accept it (attest.py accept fintech-sre b_1), or revert or edit it (resume-ats: ats.py --revise fintech-sre)
 checkpoint 4: 2 open items
 ```
 
@@ -394,11 +398,12 @@ Never edit a stage folder or `decisions/` by hand, and never weaken or skip a ch
 ## Changes to resume-core, fixtures and the architecture spec
 
 1. `rcore.stages.stale_inputs(workspace)`: for each committed stage, the list of `(input, why)` that make it stale, `why` being `changed`, `missing` or `stale` (the input is in a stage that is itself stale); empty for a fresh stage. `status` is derived from it, and it restores an interrupted swap first, as `status` does.
-2. resume-core `SKILL.md`: `stale_inputs` among the helpers; `decisions/attestations.json` is written only by resume-build's `attest.py`.
+2. resume-core `SKILL.md`: `stale_inputs` among the helpers; `decisions/attestations.json` is written only by resume-build's `attest.py`, and `decisions/projects.json` only by resume-analyze's `decide.py`. resume-ats's `SKILL.md` names `attest.py` as the writer of attestations.
 3. `pytest.ini` adds `skills/resume-build/scripts` to `pythonpath`. The test command and CI do not change: build uses only the standard library.
 4. No fixture changes. The fixture's `decisions/` is what a first run records through the scripts (a test rebuilds it), and its attestation is what `attest.py accept fintech-sre b_1` writes.
 5. The architecture spec: the plugin layout lists build's scripts and the command files; "Commands" describes their format and the manifests; the Decisions table names `attest.py` as the writer of `attestations.json`; the resume-build section points here; staleness mentions `stale_inputs`.
 6. README: installing the plugin and the commands.
+7. The roadmap: piece 9 ticked, and "Start here" says the checklist is done and points to the small follow-ups.
 
 ## Error handling
 
