@@ -181,3 +181,39 @@ def test_input_spelling_is_normalized_so_staleness_propagates(workspace):
     status = stages.status(workspace)
     assert status["04-projects"] == "stale"
     assert status["06-bullets"] == "stale"
+
+
+def test_stale_inputs_name_why_each_stage_is_stale(workspace):
+    _commit_chain(workspace)
+    assert stages.stale_inputs(workspace) == {"04-projects": [], "06-bullets": []}
+    evidence = workspace / "02-evidence" / "evidence.jsonl"
+    evidence.write_text(evidence.read_text() + "\n")
+    assert stages.stale_inputs(workspace) == {"04-projects": [("02-evidence", "changed")],
+                                              "06-bullets": [("04-projects", "stale")]}
+
+
+def test_stale_inputs_list_every_input_not_only_the_first(workspace):
+    tmp = _write_bullets(workspace, [BULLET])
+    (tmp / "stories.md").write_text("# Stories\n", encoding="utf-8")
+    inputs = ["decisions/metrics.json", "decisions/profile.json", "decisions/terms.json"]
+    assert stages.commit(workspace, "06-bullets", inputs) == []
+    wsio.write_json(workspace / "decisions" / "metrics.json", [])
+    (workspace / "decisions" / "profile.json").unlink()
+    assert stages.stale_inputs(workspace)["06-bullets"] == [("decisions/metrics.json", "changed"),
+                                                           ("decisions/profile.json", "missing")]
+
+
+def test_status_agrees_with_stale_inputs(workspace):
+    _commit_chain(workspace)
+    wsio.write_json(workspace / "04-projects" / "projects.json", [])
+    reasons, status = stages.stale_inputs(workspace), stages.status(workspace)
+    assert status == {stage: "missing" if stage not in reasons else "stale" if reasons[stage] else "fresh"
+                      for stage in stages.STAGES}
+    assert (status["04-projects"], status["06-bullets"]) == ("fresh", "stale")
+
+
+def test_stale_inputs_restore_an_interrupted_swap(workspace):
+    _commit_chain(workspace)
+    (workspace / "06-bullets").rename(workspace / "06-bullets.old")
+    assert stages.stale_inputs(workspace)["06-bullets"] == []
+    assert not (workspace / "06-bullets.old").exists()

@@ -1,0 +1,11 @@
+{
+  "name": "resume-builder",
+  "description": "Build an evidence-backed engineering resume: collect your pull requests, reviews, tickets and performance reviews, find your most impactful projects, and produce ATS-friendly PDF, DOCX and plain-text resumes whose every claim cites a source.",
+  "author": {
+    "name": "rrotaru",
+    "url": "https://github.com/rrotaru"
+  },
+  "homepage": "https://github.com/rrotaru/resume-builder",
+  "repository": "https://github.com/rrotaru/resume-builder",
+  "keywords": ["resume", "career", "ats", "engineering", "job-search"]
+}

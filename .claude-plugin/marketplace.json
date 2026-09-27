@@ -1,0 +1,15 @@
+{
+  "name": "resume-builder",
+  "owner": {
+    "name": "rrotaru",
+    "url": "https://github.com/rrotaru"
+  },
+  "description": "The resume-builder plugin: an evidence-backed engineering resume, built one checkpoint at a time.",
+  "plugins": [
+    {
+      "name": "resume-builder",
+      "source": "./",
+      "description": "Build an evidence-backed engineering resume from your pull requests, reviews, tickets and performance reviews, one checkpoint at a time."
+    }
+  ]
+}

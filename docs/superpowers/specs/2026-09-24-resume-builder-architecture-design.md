@@ -31,8 +31,8 @@ A plugin of agent skills that helps a software engineer build a resume from evid
 ```
 resume-builder/
   .claude-plugin/
-    plugin.json
-    marketplace.json
+    plugin.json              # the plugin's metadata; no version, so installs follow the repository
+    marketplace.json         # the repository is its own marketplace, with the plugin at ./
   commands/                  # thin wrappers: build, init, collect, import, analyze,
                              # wizard, write, sanitize, ats, render
   skills/
@@ -65,12 +65,13 @@ resume-builder/
       scripts/               # render.py
       templates/             # classic.html (v1: one single-column ATS-safe template)
     resume-build/            # full workflow orchestrator
+      scripts/               # progress.py, final_review.py, attest.py
   tests/
 ```
 
 ### Commands
 
-Namespaced as `/resume-builder:<name>`. Each command file only passes arguments (`--workspace <path>`, `--jd <file>`, and so on) to the matching skill. All logic lives in skills, so other harnesses lose only the shortcuts. `/resume-builder:build` runs the full workflow.
+Namespaced as `/resume-builder:<name>`. Each command file only passes arguments (`--workspace <path>`, `--jd <file>`, and so on) to the matching skill: its body is the one line ``Use the `resume-builder:resume-<name>` skill with these arguments: $ARGUMENTS``, with `description`, `argument-hint` and `disable-model-invocation: true` (the model uses the skills, which Claude Code also offers as `/resume-builder:resume-<name>`). All logic lives in skills, so other harnesses lose only the shortcuts. `/resume-builder:build` runs the full workflow. The engineer installs the plugin with `/plugin marketplace add rrotaru/resume-builder` and `/plugin install resume-builder@resume-builder`. See the [resume-build spec](2026-09-27-resume-build-design.md#commands-and-manifests).
 
 ### Portability rules
 
@@ -115,7 +116,7 @@ resume-workspace/
 
 **Git authors.** `config.json` `git_authors` (optional, default `[]`) lists the emails or names the engineer commits under. resume-collect keeps a local commit only when its author matches one exactly, ignoring case.
 
-**Ownership.** Each numbered folder is written by exactly one skill. `resume-wizard` writes only to `decisions/` (`profile.json`, `terms.json`, `metrics.json` and `wizard.json`, through its `answer.py`). Checkpoints write engineer choices to `decisions/`.
+**Ownership.** Each numbered folder is written by exactly one skill. `resume-wizard` writes only to `decisions/` (`profile.json`, `terms.json`, `metrics.json` and `wizard.json`, through its `answer.py`). Checkpoints write engineer choices to `decisions/`: checkpoint 2 through resume-analyze's `decide.py` (`projects.json`), checkpoint 3 through the wizard, and checkpoint 4 through the wizard and resume-build's `attest.py` (`attestations.json`).
 
 **Stage metadata.** Every stage folder contains `_stage.json`:
 
@@ -124,7 +125,7 @@ resume-workspace/
  "inputs": {"02-evidence/evidence.jsonl": "sha256:...", "decisions/projects.json": "sha256:..."}}
 ```
 
-A stage is **stale** when any recorded input hash no longer matches, an input is gone, or an input lives in a stage that is itself stale. `resume-build` uses this to offer reuse or rebuild. A standalone command warns before consuming stale inputs.
+A stage is **stale** when any recorded input hash no longer matches, an input is gone, or an input lives in a stage that is itself stale. `rcore.stages.stale_inputs` names every such input, and `status` is derived from it. `resume-build` uses this to offer reuse or rebuild, and to choose the cheapest rebuild for the input that changed. A standalone command warns before consuming stale inputs. `01-raw` and `03-profile` record no inputs (their sources are outside the workspace), so resume-build also shows when `02-evidence` was built and compares `03-profile/source.json` with the resume file.
 
 **Safe writes.** A stage writes to `<stage>.tmp/`, validates, then renames into place (the previous output is renamed to `<stage>.old/` and deleted after the swap). On failure the previous stage output remains intact. If a swap is interrupted, leaving `<stage>.old/` but no `<stage>/`, the next `begin`, `commit` or `status` renames `<stage>.old/` back. `stage.py begin <stage> --from-current` starts the tmp folder as a copy of the committed `<stage>/` (without `_stage.json`), so a skill can replace one part of a stage, such as one job's folder in `08-ats/jobs/`, and keep the rest. `stage.py commit` accepts only workspace-relative inputs (no absolute paths, no `..`, and not the workspace root itself: empty, `.` or any path resolving to it) and takes `--extra '<JSON object>'`, stored as `extra` in `_stage.json` (for example a skipped-row count).
 
@@ -196,7 +197,7 @@ All files are JSON or JSONL and validated against `resume-core/schemas`.
 | `projects.json` | `{project_id, action: exclude\|merge\|split\|rename\|set_role\|set_scope\|set_rank, merge_with?, split_groups?, name?, summary?, role?, scope?, rank?, evidence_ids?}`, written only by `decide.py` at checkpoint 2 and applied in order ([resume-analyze spec](2026-09-25-resume-analyze-design.md#project-decisions)) |
 | `metrics.json` | `{id, project_id, value, unit, statement, evidence_ids?}`. The statement states the value. `evidence_ids` is the project's evidence when the metric was recorded, used only to suggest a project when the metric's project is gone ([resume-wizard spec](2026-09-25-resume-wizard-design.md#metrics)). |
 | `profile.json` | JSON Resume fragments supplied by the wizard: facts only, written under the effective-profile rules ([resume-wizard spec](2026-09-25-resume-wizard-design.md#profile-answers)) |
-| `attestations.json` | `{job_slug, bullet_id, text_sha256, action: accept\|edit}` |
+| `attestations.json` | `{job_slug, bullet_id, text_sha256, action: accept\|edit}`, written only by resume-build's `attest.py` at checkpoint 4, for a flag of a committed job version that holds the bullet's current text hash ([resume-build spec](2026-09-27-resume-build-design.md#attestpy)) |
 | `wizard.json` | `{anchors: [{entry, answered_for}], skipped: [{question, answered_for?}]}`: which imported entry each profile answer inside an array was given for, and the questions the engineer declined. Read and written only by the wizard. No stage records it as an input. |
 
 An attestation applies only while the bullet's text hash matches, so any later edit to the bullet invalidates it.
@@ -292,7 +293,7 @@ Detailed in the [resume-render spec](2026-09-25-resume-render-design.md).
 If Chromium is unavailable, offers to install it. DOCX and TXT still render without it.
 
 ### resume-build
-Orchestrates the full run and offers to reuse any fresh stage:
+Detailed in the [resume-build spec](2026-09-27-resume-build-design.md). Orchestrates the full run and offers to reuse any fresh stage:
 
 ```
 init → collect [CP1] → import → analyze [CP2] → sanitize scan
@@ -300,7 +301,11 @@ init → collect [CP1] → import → analyze [CP2] → sanitize scan
      → [CP4: bullets, ATS reports, job flags, new terms] → render
 ```
 
-Every checkpoint persists its choices to `decisions/`, so an interrupted run resumes where it stopped. Checkpoint 4 decides new terms by running the wizard, which asks about `07-sanitized/new-terms.json`, and then sanitize apply again.
+- Its `SKILL.md` hands each step to the skill that owns it, by name, never by a path into its folder (portability rule 1).
+- **Script:** `progress.py` prints each step's state (fresh, stale with the inputs that changed, a draft in progress, import `changed` or `none`) and the one command that continues the first step not done. Checkpoint 3 has no state: the wizard runs before write, sanitize apply or ats begins again, until `questions.py` has nothing open.
+- **Checkpoint 4:** `final_review.py` prints stale stages, undecided new terms, every allowed-term notice, the text sanitize apply changed, facts holding a denied term, each version's report and each job's flags, then the open items. New terms are decided by running the wizard, which asks about `07-sanitized/new-terms.json`, and then sanitize apply again. Each flagged job bullet is accepted (`attest.py accept`), reverted or edited (resume-ats `ats.py --revise`, then `--commit`; an edit still flagged is attested with `attest.py edit`).
+
+Every checkpoint persists its choices to `decisions/`, and every interrupted step leaves a draft in `<stage>.tmp/`, so an interrupted run resumes where it stopped.
 
 ## Error handling
 
@@ -320,6 +325,7 @@ Every checkpoint persists its choices to `decisions/`, so an interrupted run res
 | A bullet citing another project's evidence, or a number its sources do not state | `write.py --commit` refuses it with one line per problem. The draft stays in `06-bullets.tmp/` to fix. |
 | A tailored resume with a retyped fact, a misplaced bullet, a claim in the general resume or a lint error | `ats.py --commit` refuses it with one line per problem. The draft stays in `08-ats.tmp/` to fix. A job's claims are flagged instead, for checkpoint 4. |
 | Render check fails | No output files. Failing records listed with the fixing command. |
+| An interrupted run | `progress.py` names the step to continue: every choice is in `decisions/`, and every unfinished step is a draft its skill continues. |
 
 ## Testing
 
@@ -327,7 +333,7 @@ Every checkpoint persists its choices to `decisions/`, so an interrupted run res
 - **Contract tests:** every fixture validates against `resume-core/schemas`, and each stage's fixture output is valid input for the next stage.
 - **Render tests:** render a fixture `resume.json` to PDF, extract its text with `pypdf`, and assert section order and bullet text survive (checks ATS readability). Assert the DOCX opens. Compare TXT against a saved copy.
 - **End-to-end fixture:** `tests/fixtures/workspace/` holds a made-up engineer. CI runs all script-only steps (normalize → signals → checks → render), with saved outputs standing in for model-driven stages.
-- **Skill lint:** validates `SKILL.md` front matter and enforces the portability rules.
+- **Skill lint:** validates `SKILL.md` front matter and enforces the portability rules. A plugin test checks the manifests and that each command only passes its arguments to its skill.
 - **Model-quality evals:** a small evaluation set for grouping, role assignment and bullet wording, run manually or on a schedule. Not in CI, since model output varies.
 
 ## Out of scope for v1
@@ -352,4 +358,4 @@ Each gets its own spec → plan → implementation cycle, in this order. Progres
 6. **resume-sanitize** and **resume-wizard:** term scan and apply, checkpoint 3 ([sanitize spec](2026-09-25-resume-sanitize-design.md), [wizard spec](2026-09-25-resume-wizard-design.md)).
 7. **resume-write:** XYZ bullets and STAR stories ([spec](2026-09-26-resume-write-design.md)).
 8. **resume-ats:** lint, keywords, per-job tailoring and claim diffing ([spec](2026-09-27-resume-ats-design.md)).
-9. **resume-build** and **commands:** orchestration, staleness, checkpoints; plugin manifest and marketplace.
+9. **resume-build** and **commands:** orchestration, staleness, checkpoints; plugin manifest and marketplace ([spec](2026-09-27-resume-build-design.md)).
