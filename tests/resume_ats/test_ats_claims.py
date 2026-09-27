@@ -124,3 +124,7 @@ def test_checked_holds_every_bullet_and_the_summary(monkeypatch):
     assert flags["checked"]["summary"] == ids.text_sha256(resume["basics"]["summary"])
     assert [(f["bullet_id"], f["reasons"]) for f in flags["flags"]] == [
         ("summary", [INTRODUCES.format("Kafka")]), ("b_1", [INTRODUCES.format("SLO compliance")])]
+
+
+def test_a_sign_or_hash_before_a_number_is_not_a_term():
+    assert claims.diff("Grew throughput +40% on #1 service", KNOWN + ["the first service"]) == [NUMBER.format("1")]

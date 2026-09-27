@@ -97,7 +97,7 @@ The three checkers read the draft in `08-ats.tmp/`, every version in it by defau
 
 ## Pipeline
 
-1. `ats.py` reads and validates its [inputs](#inputs). A missing `07-sanitized/bullets.json` names `/resume-builder:sanitize`, and an invalid input the command that fixes it. It warns when `07-sanitized` is stale.
+1. `ats.py` reads and validates its [inputs](#inputs). A missing `07-sanitized/bullets.json` names `/resume-builder:sanitize`, and an invalid input the command that fixes it. It warns when `06-bullets` or `07-sanitized` is stale.
 2. If `08-ats.tmp/` exists, a draft is in progress and `ats.py` works in it. Otherwise it begins one as a copy of the committed `08-ats/` (`stages.begin(..., from_current=True)`), or empty when there is none. So versions it does not name are kept.
 3. It [drafts](#drafts) the named version (replacing its folder in the draft), revises or removes one, and prints the [material](#what-atspy-prints).
 4. The model writes the version's `keywords.json`, runs `keywords.py`, and edits `resume.json`, checking with `ats_lint.py` and `diff_claims.py` as it goes.
@@ -177,11 +177,18 @@ One rule finds a keyword in a text, for coverage and for the claim diff:
 A keyword missing with evidence can reach the resume two ways. A bullet whose sources hold it can be reworded to use it. Or, if the engineer agrees, the wizard adds it to the skills (`answer.py add /skills/<i>/keywords KEYWORD`), the only way a keyword enters `skills`: the fact check rejects any keyword the effective profile does not list. That answer makes `06-bullets` stale, so write and sanitize apply are recommitted (`write.py --from-current`, then `--commit`, then `apply.py` and `apply.py --commit`) before ats drafts again.
 
 ```
-keywords for fintech-sre (8):
-  covered: Go (/work/0/x-highlights/0/text, /work/1/x-highlights/0/text, /skills/0/keywords/0); Redis; PostgreSQL; SLO compliance; on-call
-  missing with evidence: metrics (ev_56410ed1)
-  missing without evidence: Kubernetes; incident response
+keywords for fintech-sre: 5 covered, 1 missing with evidence, 2 missing without evidence
+  covered  Go  /work/0/x-highlights/0/text, /work/1/x-highlights/0/text, /skills/0/keywords/0
+  covered  Redis  /work/0/x-highlights/0/text, /skills/0/keywords/2
+  covered  PostgreSQL  /skills/0/keywords/3
+  covered  SLO compliance  /work/0/x-highlights/0/text
+  covered  on-call  /work/0/x-highlights/1/text
+  missing with evidence  metrics  ev_56410ed1
+  missing without evidence  Kubernetes
+  missing without evidence  incident response
 ```
+
+At most three places are printed per keyword (`and 4 more`); `report.json` lists them all.
 
 ## Claim diff
 
@@ -246,7 +253,7 @@ For the fixture, the job's `b_1` rewrite, `…idempotency cache in Go, raising c
 | A project entry has no bullets | warning |
 | No skill keywords | warning |
 
-**Experience** is the union of the effective profile's `work` date ranges in whole months, counting the first and last: a year alone runs from January to December, a job without `endDate` runs to the current month, and a job without `startDate` is not counted. Under 96 months (8 years) the budget is 1 page, otherwise 2.
+**Experience** is the union of the effective profile's `work` date ranges in whole months, counting the first and last: a year alone runs from January to December, a job without `endDate` runs to the current month, no job counts past the current month, and a job without `startDate` is not counted. Under 96 months (8 years) the budget is 1 page, otherwise 2.
 
 **The estimate** counts lines of the template's body text (10.5 pt at 1.3 line height), following render's classic template, and is rounded up:
 
@@ -271,11 +278,11 @@ One page is 50 lines. Measured in Chromium against render's template at A4 width
 
 ## `report.json`
 
-The commit writes each version's `report.json` (`ats-report.schema.json`). For the fixture's general resume:
+The commit writes each version's `report.json` (`ats-report.schema.json`). For the fixture's general resume, abridged:
 
 ```json
 {
-  "length": {"experience_months": 88, "pages": 1, "estimated_lines": 34, "line_budget": 50},
+  "length": {"experience_months": 88, "pages": 1, "estimated_lines": 36, "line_budget": 50},
   "keywords": [
     {"keyword": "Go", "status": "covered",
      "where": ["/work/0/x-highlights/0/text", "/work/1/x-highlights/0/text", "/skills/0/keywords/0"]},
@@ -326,17 +333,18 @@ places:
     b_3  xyz  Migrated the order service from PHP to Go, serving 2M requests per day
   /projects/0  ledger-lint  2021-04 to present
     b_4  xyz  Built ledger-lint, an open-source linter for double-entry ledger files with 300 GitHub stars
-08-ats.tmp/general/resume.json: every fact from the profile and 4 bullets in their places, estimated 35 of 50 lines
+08-ats.tmp/general/resume.json: every fact from the profile and 4 bullets in their places, estimated 36 of 50 lines
+kept 08-ats.tmp/general/keywords.json from before; check it still fits
 next: write 08-ats.tmp/general/keywords.json (the target role's keywords), run keywords.py general, then select, order and reword the bullets in resume.json and run ats.py --commit
 ```
 
-`warning:` lines come first: `07-sanitized` is stale, a bullet has no place (`warning: b_7 (pj_… 'Ledger export') has no place: no job of the profile overlaps its project; it is left out until the job is added with /resume-builder:wizard`), a place past the end of the profile. Then a `note:` for each keyword left out (`note: /skills/0/keywords/3 'Falcon SDK' holds the denied term 'Falcon'; a keyword cannot be replaced, so it is left out`). A job version also prints its posting's path and first line, and `--revise` prints each bullet with its original text when it differs (`was: …`) and, for a job, its current flags.
+`warning:` lines come first: `06-bullets` or `07-sanitized` is stale, a bullet has no place (`warning: b_7 (pj_… 'Ledger export') has no place: no job of the profile overlaps its project; it is left out until the job is added with /resume-builder:wizard`), a place past the end of the profile. Then a `note:` for each keyword left out (`note: /skills/0/keywords/3 'Falcon SDK' holds the denied term 'Falcon'; a keyword cannot be replaced, so it is left out`). A job version also prints its posting's path and first line, and `--revise` prints each bullet with its original text when it differs (`was: …`) and, for a job, its current flags.
 
-With `--commit`, after the checks pass, it prints the warnings of each version, then:
+With `--commit`, after the checks pass, it prints the warnings of each version (`warning: general: …`) and any review whose full text cannot be read, then:
 
 ```
-general: 4 of 4 bullets, 35 of 50 lines; keywords: 4 covered, 1 missing with evidence, 1 missing without evidence
-fintech-sre: 4 of 4 bullets, 35 of 50 lines; keywords: 5 covered, 1 missing with evidence, 2 missing without evidence; 1 flagged
+general: 4 of 4 bullets, 36 of 50 lines; keywords: 4 covered, 1 missing with evidence, 1 missing without evidence
+fintech-sre: 4 of 4 bullets, 36 of 50 lines; keywords: 5 covered, 1 missing with evidence, 2 missing without evidence; 1 flagged
   b_1  introduces 'SLO compliance', which no cited source mentions
 committed 08-ats: general, fintech-sre (1 flagged)
 ```

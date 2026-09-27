@@ -423,3 +423,19 @@ def test_an_invalid_terms_file_stops_the_draft(workspace, capsys):
     (workspace / "decisions" / "terms.json").write_text(json.dumps([{"term": "x"}]), encoding="utf-8")
     assert run(ats, workspace) == 1
     assert "decisions/terms.json is not valid; fix it with /resume-builder:wizard" in capsys.readouterr().err
+
+
+def test_a_fact_holding_a_denied_term_needs_the_wizard(workspace, capsys):
+    edit(workspace / "decisions" / "terms.json", lambda t: t.append(
+        {"term": "Tailspin", "replacement": "a toy maker", "kind": "customer"}))
+    assert run(ats, workspace) == 0
+    assert capsys.readouterr().out.startswith(
+        "warning: /work/1/name 'Tailspin Toys' holds the denied term 'Tailspin'; facts are copied exactly")
+    tailor_general(workspace)
+    assert run(ats, workspace, "--commit") == 1
+    out = capsys.readouterr().out
+    assert "08-ats.tmp/general/resume.json:/work/1/name: contains denylisted term 'Tailspin'\n" in out
+    assert "for a fact field, set a replacement value with /resume-builder:wizard" in out
+    assert answer.main([*ws_arg(workspace), "profile", "/work/1/name", "A toy company"]) == 0
+    assert run(ats, workspace) == 0
+    assert draft_resume(workspace)["work"][1]["name"] == "A toy company"

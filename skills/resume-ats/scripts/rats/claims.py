@@ -41,7 +41,7 @@ SCOPE = (
     ("company", ("company-wide", "companywide", "enterprise-wide", "global", "globally", "worldwide"),
      lambda p: _SCOPE_RANK.get(p.get("scope"), 0) >= 3),
 )
-_WORD = re.compile(r"[\w+#]+(?:\.[\w+#]+)*")
+_WORD = re.compile(r"[^\W_][\w+#]*(?:\.[\w+#]+)*")  # starts with a letter or digit
 _DOTTED = re.compile(r"^(?:[^\W\d_]\.)+[^\W\d_]$")  # e.g, i.e: abbreviations, not names
 _SENTENCE_END = ".!?"
 

@@ -40,6 +40,12 @@ def homeless_warnings(material: Material) -> list[str]:
     return lines
 
 
+def denied_fact_warnings(material: Material) -> list[str]:
+    return [f"{pointer} {value!r} holds the denied term {', '.join(repr(t) for t in held)}; facts are copied "
+            "exactly, so the commit refuses it until the engineer sets a replacement value with "
+            "/resume-builder:wizard" for pointer, value, held in draft.denied_facts(material)]
+
+
 def withheld_notes(material: Material) -> list[str]:
     return [f"{pointer} {keyword!r} holds the denied term {', '.join(repr(t) for t in held)}; a keyword cannot be "
             "replaced, so it is left out" for pointer, keyword, held in draft.withheld(material)]

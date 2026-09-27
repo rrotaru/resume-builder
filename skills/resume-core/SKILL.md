@@ -61,7 +61,8 @@ A bullet in `06-bullets/bullets.json` (and `07-sanitized/bullets.json`) names it
 
 - `08-ats/general/resume.json` and `08-ats/jobs/<slug>/resume.json` follow `schemas/tailored-resume.schema.json`. Only the sections `basics`, `work`, `projects`, `education`, `certificates` and `skills` are allowed. Every `work` and `projects` entry has `x-highlights` (`{bullet_id, text, sources}`, possibly empty) and `highlights` holding the same texts in order. Other sections carry no `highlights`. A `basics.summary` needs a non-empty `basics.x-summary-sources`. Every object accepts only the fields listed in the schema: `work` and `projects` entries have no `summary` or `description` (claims go in sourced highlights), and entries carry no `x-sources`. `basics.label`, if present, must equal `config.json` `target_role` or the profile's `basics.label`.
 - Every other field that is not a bullet is a **fact field** (name, contact details, employer, title, dates, degree, institution, certificate, skill name, level and keywords) and must be copied from the profile, as described below. Never write or reword a fact field in a tailored resume; if the profile is wrong, the engineer corrects it through the wizard.
-- `08-ats/jobs/<slug>/flags.json` is `{"checked": {"<bullet_id>": "<text_sha256>"}, "flags": [...]}`. The claim diff records in `checked` the hash of every bullet it examined, flagged or not, and lists unsupported claims in `flags`.
+- `08-ats/jobs/<slug>/flags.json` is `{"checked": {"<bullet_id>": "<text_sha256>"}, "flags": [...]}`. The claim diff records in `checked` the hash of every bullet it examined, and `basics.summary` under the id `summary`, flagged or not, and lists unsupported claims in `flags`.
+- Beside each `resume.json`, resume-ats keeps `keywords.json` (`schemas/ats-keywords.schema.json`: the target role's or the posting's keywords) and `report.json` (`schemas/ats-report.schema.json`: length, keyword coverage, bullets left out, lint warnings), and a job keeps its posting as `jd.txt`. Only resume-ats writes `08-ats/`.
 
 ## The profile
 
@@ -130,7 +131,10 @@ from rcore import ids, stages, wsio  # noqa: E402
 `documents.extract(data, fmt, name)` (the normalized text of a PDF, DOCX, TXT or Markdown file's bytes),
 `numbers.numbers(text)` (numbers written with digits, as written and as exact decimal values), `numbers.states_value(text, value)`
 (a metric's statement or a bullet states the value), `numbers.unsupported(text, sources)` (numbers no source states),
-`numbers.digits(value)` (a JSON number written back with digits, never an exponent),
-`raw.RawReader(workspace).text(raw_ref)` (the text of the raw record at an evidence item's `raw_ref`, such as a performance review's full text).
+`numbers.digits(value)` (a JSON number written back with digits, never an exponent), `numbers.spans(text)` (each number with its position),
+`raw.RawReader(workspace).text(raw_ref)` (the text of the raw record at an evidence item's `raw_ref`, such as a performance review's full text),
+`citations.Citations(workspace, evidence, metrics, profile, wizard).texts(ref)` (what a source reference says: an evidence item's title and excerpt and a review's full text, a metric's value and statement, a pointer's value; `.warnings` for reviews without their full text),
+`places.place(bullet)` (the bullet's place, `("work", i)`, `("projects", i)` or None) and `places.pointer_place(ref)`,
+`facts.matches(entry, candidate)` (a tailored entry copies that profile entry, the fact check's rule for one entry).
 
 `rcore` imports only the standard library. `documents` imports `pypdf` or `python-docx` only when it reads a PDF or DOCX, so a script that reads those formats pins them in its PEP 723 block, at the versions `render.py` pins.

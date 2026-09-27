@@ -18,7 +18,7 @@ out, orders and rewords; it never types a fact.
 """
 from __future__ import annotations
 
-from rcore import schema, terms
+from rcore import facts, schema, terms
 
 from .common import one_line
 from .material import SECTIONS, Material
@@ -55,8 +55,8 @@ def _basics(material: Material, spec: dict) -> dict:
     found = found if isinstance(found, dict) else {}
     node = spec["properties"]["basics"]
     basics = _copy(found, node, spec, skip=("label", "location", "profiles", "summary", "x-summary-sources"))
-    role = material.inputs.target_role
-    label = role or found.get("label")
+    role = (material.inputs.config or {}).get("target_role")
+    label = role if isinstance(role, str) and role.strip() else found.get("label")  # as config.json spells it
     if isinstance(label, str) and label:
         basics["label"] = label
     if isinstance(found.get("location"), dict):
@@ -98,6 +98,17 @@ def withheld(material: Material) -> list[tuple[str, str, list[str]]]:
             held = terms.terms_in(keyword, material.patterns) if isinstance(keyword, str) else []
             if held:
                 found.append((f"/skills/{i}/keywords/{k}", keyword, held))
+    return found
+
+
+def denied_facts(material: Material) -> list[tuple[str, str, list[str]]]:
+    """(pointer, value, denied terms) for each fact field of the effective profile, other than a keyword, that
+    holds a denied term. The draft copies it, and the terms check refuses it until the wizard replaces it."""
+    found = []
+    for pointer, value in facts.fact_values(material.effective):
+        held = terms.terms_in(value, material.patterns)
+        if held and "/keywords/" not in pointer:
+            found.append((pointer, value, held))
     return found
 
 

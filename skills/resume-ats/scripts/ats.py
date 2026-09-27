@@ -51,8 +51,9 @@ FIXES = {
               "field); undo the edit, or draft the version again",
     "sources": "fix: keep every fact as drafted (leave an entry out or shorten a date, never retype one) and each "
                "bullet's sources; if the profile itself is wrong, fix it with /resume-builder:wizard and draft again",
-    "terms": "fix: a denied term may not be on the resume: keep the sanitized wording; for a false positive, an "
-             "allowed term the engineer agrees to (/resume-builder:wizard)",
+    "terms": "fix: a denied term may not be on the resume: keep a bullet's sanitized wording; for a fact field, set "
+             "a replacement value with /resume-builder:wizard and draft again; for a false positive, an allowed term "
+             "the engineer agrees to (/resume-builder:wizard)",
     "placement": "fix: keep each bullet under the entry it was drafted under, with its bullet_id and sources, and "
                  "use each bullet once",
     "claims": "fix: in the general resume, reword only within what each bullet's sources say, or use the bullet's "
@@ -153,7 +154,8 @@ def _draft(args, workspace: Path) -> int:
     resume = draft.build(found)
     wsio.write_json(folder / RESUME, resume)
 
-    for line in report.stale_warnings(workspace) + report.homeless_warnings(found):
+    for line in report.stale_warnings(workspace) + report.homeless_warnings(found) + \
+            report.denied_fact_warnings(found):
         print(f"warning: {line}")
     for line in report.withheld_notes(found):
         print(f"note: {line}")

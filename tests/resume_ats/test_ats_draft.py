@@ -126,3 +126,21 @@ def test_normalize_orders_keys_and_sets_highlights():
                                      "x-highlights": [{"bullet_id": "b_1", "text": "New",
                                                        "sources": ["ev_191cc8ce"]}]}
     assert list(normalized["skills"][0]) == ["name", "keywords"]
+
+
+def test_the_label_is_the_target_role_as_config_spells_it(workspace):
+    edit(workspace / "config.json", lambda c: c.update(target_role=" Staff Engineer "))
+    assert draft.build(build(workspace))["basics"]["label"] == " Staff Engineer "  # the label check compares exactly
+
+
+def test_a_fact_holding_a_denied_term_is_copied_and_warned_about(workspace):
+    edit(workspace / "decisions" / "terms.json", lambda t: t.append(
+        {"term": "ledger-lint", "replacement": "a linter", "kind": "product"}))
+    found = build(workspace)
+    assert draft.build(found)["projects"][0]["name"] == "ledger-lint"
+    assert report.denied_fact_warnings(found) == [
+        "/projects/0/name 'ledger-lint' holds the denied term 'ledger-lint'; facts are copied exactly, so the commit "
+        "refuses it until the engineer sets a replacement value with /resume-builder:wizard",
+        "/projects/0/url 'https://github.com/jrivera/ledger-lint' holds the denied term 'ledger-lint'; facts are "
+        "copied exactly, so the commit refuses it until the engineer sets a replacement value with "
+        "/resume-builder:wizard"]
