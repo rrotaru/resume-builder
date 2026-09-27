@@ -89,8 +89,8 @@ def _ensure_draft(workspace: Path) -> str:
     if (workspace / TMP).is_dir():
         names = [v.name for v in draft_versions(workspace)]
         return "continuing the draft" + (f" with {', '.join(names)}" if names else "")
-    names = committed_versions(workspace)
-    stages.begin(workspace, STAGE, from_current=True)
+    stages.begin(workspace, STAGE, from_current=True)  # also restores an interrupted commit's 08-ats.old/
+    names = [v.name for v in draft_versions(workspace)]
     return f"a copy of the committed {STAGE}/ with {', '.join(names)}" if names else "a new draft"
 
 
