@@ -133,27 +133,42 @@ def commit(workspace: Path, stage: str, inputs: list[str], extra: dict | None = 
     return []
 
 
-def status(workspace: Path) -> dict[str, str]:
-    """Map each stage to 'missing', 'fresh' or 'stale'.
+def stale_inputs(workspace: Path) -> dict[str, list[tuple[str, str]]]:
+    """For each committed stage, the recorded inputs that make it stale.
 
-    A stage is stale if an input's hash changed, an input is gone, or an
-    input lives in a stage that is itself stale. Restores any stage left
-    as <stage>.old/ by an interrupted commit first.
+    Each is (input, why): "stale" when the input lives in a stage that is
+    itself stale, "missing" when it is gone, "changed" when its hash differs.
+    A fresh stage maps to []; a stage without _stage.json is left out.
+    Restores any stage left as <stage>.old/ by an interrupted commit first.
     """
     workspace = Path(workspace)
-    result: dict[str, str] = {}
+    result: dict[str, list[tuple[str, str]]] = {}
     for stage in STAGES:
         _recover(workspace, stage)
         meta_path = workspace / stage / META
         if not meta_path.is_file():
-            result[stage] = "missing"
             continue
-        state = "fresh"
+        reasons = []
         for rel, digest in wsio.read_json(meta_path)["inputs"].items():
             upstream = _normalize_input(rel).split("/", 1)[0]
             path = workspace / rel
-            if result.get(upstream) == "stale" or not path.exists() or hash_path(path) != digest:
-                state = "stale"
-                break
-        result[stage] = state
+            if result.get(upstream):
+                reasons.append((rel, "stale"))
+            elif not path.exists():
+                reasons.append((rel, "missing"))
+            elif hash_path(path) != digest:
+                reasons.append((rel, "changed"))
+        result[stage] = reasons
     return result
+
+
+def status(workspace: Path) -> dict[str, str]:
+    """Map each stage to 'missing', 'fresh' or 'stale'.
+
+    A stage is stale if an input's hash changed, an input is gone, or an
+    input lives in a stage that is itself stale (stale_inputs says which).
+    Restores any stage left as <stage>.old/ by an interrupted commit first.
+    """
+    reasons = stale_inputs(workspace)
+    return {stage: "missing" if stage not in reasons else "stale" if reasons[stage] else "fresh"
+            for stage in STAGES}
