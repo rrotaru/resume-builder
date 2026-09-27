@@ -128,3 +128,15 @@ def test_checked_holds_every_bullet_and_the_summary(monkeypatch):
 
 def test_a_sign_or_hash_before_a_number_is_not_a_term():
     assert claims.diff("Grew throughput +40% on #1 service", KNOWN + ["the first service"]) == [NUMBER.format("1")]
+
+
+def test_a_phrase_is_not_found_across_two_known_texts():
+    """Each known text is matched on its own, so a phrase split across two sources is not supported."""
+    known = ["Tracked the SLO", "compliance review", "wrote node", "js tests", "Built a cache across the", "cross",
+             "team boundaries"]
+    assert claims.diff("Cut latency, raising SLO compliance", known, ["SLO compliance"]) == [
+        INTRODUCES.format("SLO compliance")]
+    assert claims.diff("Moved checkout to Node.js", known) == [INTRODUCES.format("Node.js")]
+    assert claims.diff("Built a cross-team cache", known) == [
+        "claims 'cross-team', which no cited source supports"]
+    assert claims.diff("Cut latency, raising SLO compliance", ["Tracked SLO compliance"], ["SLO compliance"]) == []

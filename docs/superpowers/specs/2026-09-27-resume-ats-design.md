@@ -202,7 +202,7 @@ The claim diff compares each bullet text in a version, and its `basics.summary`,
 
 For the summary it is the texts of `x-summary-sources`, with denied terms replaced. The project a bullet belongs to also counts for scope words (below).
 
-A text is flagged for each of these not in its known texts, in the order they appear, each once:
+A text is flagged for each of these found in none of its known texts, in the order they appear, each once. Each known text is matched on its own, so a phrase never spans two of them (`SLO` ending one source and `compliance` starting the next is not `SLO compliance`):
 
 | Claim | What is compared | Reason |
 |---|---|---|

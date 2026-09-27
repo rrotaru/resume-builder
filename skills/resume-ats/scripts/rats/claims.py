@@ -1,8 +1,9 @@
 """The claim diff: what a bullet or summary says that the texts it rests on do not.
 
 A text is compared with its known texts (material.Material.known for a
-bullet, the texts of x-summary-sources for the summary). It is flagged, in
-the order the claims appear and each once, for:
+bullet, the texts of x-summary-sources for the summary), each matched on its
+own so a phrase never spans two of them. It is flagged, in the order the
+claims appear and each once, for:
 
 - a keyword of the version's keywords.json found in it and not in the known texts;
 - a technical term not in them: a word with a capital letter after its first
@@ -71,12 +72,17 @@ def _inside(start: int, end: int, spans) -> bool:
 def diff(text: str, known: list[str], keywords: list[str] = (), project: dict | None = None) -> list[str]:
     """The reasons text is flagged, in the order its claims appear; [] when every claim is known."""
     norm = match.normalize(text)
-    known_text = "\n".join(match.normalize(k) for k in known)
+    known_texts = [match.normalize(k) for k in known]
+
+    def is_known(phrase: str) -> bool:
+        # Each text on its own: joined, a phrase could match across two texts' boundary.
+        return any(match.mentions(k, phrase) for k in known_texts)
+
     found: list[tuple[int, str]] = []
     flagged: list[tuple[int, int]] = []
     for keyword in keywords:
         where = match.spans(norm, keyword)
-        if where and not match.mentions(known_text, keyword):
+        if where and not is_known(keyword):
             found.append((where[0][0], f"introduces '{keyword}', which no cited source mentions"))
             flagged += where
     seen: set[str] = set()
@@ -85,7 +91,7 @@ def diff(text: str, known: list[str], keywords: list[str] = (), project: dict | 
         word = m.group()
         if _inside(m.start(), m.end(), flagged) or not technical(word, _sentence_start(norm, m.start())):
             continue
-        if match.mentions(known_text, word):
+        if is_known(word):
             continue
         terms.append(m.span())
         if match.key(word) not in seen:
@@ -93,8 +99,8 @@ def diff(text: str, known: list[str], keywords: list[str] = (), project: dict | 
             found.append((m.start(), f"introduces '{word}', which no cited source mentions"))
     flagged += terms
     known_values: set[Decimal] = set()
-    for k in known:
-        known_values |= numbers.values(match.normalize(k))
+    for k in known_texts:
+        known_values |= numbers.values(k)
     written: set[str] = set()
     for start, end, as_written, value in numbers.spans(norm):
         if value in known_values or _inside(start, end, flagged) or as_written in written:
@@ -102,7 +108,7 @@ def diff(text: str, known: list[str], keywords: list[str] = (), project: dict | 
         written.add(as_written)
         found.append((start, f"states the number '{as_written}', which no cited source states"))
     for _, group, supports in SCOPE:
-        if (project is not None and supports(project)) or any(match.mentions(known_text, w) for w in group):
+        if (project is not None and supports(project)) or any(is_known(w) for w in group):
             continue
         for word in group:
             for start, end in match.spans(norm, word):
