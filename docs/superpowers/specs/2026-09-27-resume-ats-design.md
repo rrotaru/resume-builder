@@ -111,11 +111,12 @@ Commit each version before drafting the next, or draft several and commit once: 
 
 **Facts.** For each field `tailored-resume.schema.json` allows, the draft copies the effective profile's value exactly, and leaves out a value that does not fit the schema (the commit's fact check then names it):
 
-- `basics`: `name`, `email`, `phone`, `url`; `location` `city`, `region` and `countryCode` (not the street address or postal code, which render never shows); each `profiles` item's `network`, `username` and `url`. `label` is `config.json` `target_role` when set, else the profile's `label`.
+- `basics`: `name`, `email`, `phone`, `url`; `location` `city`, `region` and `countryCode` (not the street address or postal code, which render never shows); each `profiles` item's `network`, `username` and `url`. `label` is `config.json` `target_role`, as it spells it, when set, else the profile's `label`.
 - One entry per entry of the effective profile's `work`, `projects`, `education`, `certificates` and `skills`, in profile order, with the fields the schema allows (`description`, `summary`, `roles` and `x-lines` never). Dates are copied as they are; render formats them.
 - `skills` keywords holding a denied term are left out, each with a `note:`. A keyword cannot be replaced, since keywords combine in the overlay. With every keyword gone, the entry keeps its name, or is left out when it has none.
 - `basics.summary` is the sanitized profile's summary (`07-sanitized/profile.json`, whitespace runs as one space), citing `resume:/basics/summary`, when the imported profile has one.
 - Entries are written with keys in schema order, and sections with no entries are left out. No entry has `x-sources`.
+- Any other fact holding a denied term (a codename as a project name) is copied as it is, with a `warning:`: the terms check refuses it at the commit until the wizard records a replacement value at that path.
 
 **Bullets.** Each bullet goes under the entry for its place (`rcore.places.place`, as resume-write defines it), in `07-sanitized/bullets.json` order, as `{"bullet_id", "text", "sources"}` with the bullet's ID, text and sources, and `highlights` holds the same texts:
 
@@ -338,7 +339,7 @@ kept 08-ats.tmp/general/keywords.json from before; check it still fits
 next: write 08-ats.tmp/general/keywords.json (the target role's keywords), run keywords.py general, then select, order and reword the bullets in resume.json and run ats.py --commit
 ```
 
-`warning:` lines come first: `06-bullets` or `07-sanitized` is stale, a bullet has no place (`warning: b_7 (pj_… 'Ledger export') has no place: no job of the profile overlaps its project; it is left out until the job is added with /resume-builder:wizard`), a place past the end of the profile. Then a `note:` for each keyword left out (`note: /skills/0/keywords/3 'Falcon SDK' holds the denied term 'Falcon'; a keyword cannot be replaced, so it is left out`). A job version also prints its posting's path and first line, and `--revise` prints each bullet with its original text when it differs (`was: …`) and, for a job, its current flags.
+`warning:` lines come first: `06-bullets` or `07-sanitized` is stale, a bullet has no place (`warning: b_7 (pj_… 'Ledger export') has no place: no job of the profile overlaps its project; it is left out until the job is added with /resume-builder:wizard`), a place past the end of the profile, a fact holding a denied term (`warning: /projects/0/name 'Falcon' holds the denied term 'Falcon'; facts are copied exactly, so the commit refuses it until the engineer sets a replacement value with /resume-builder:wizard`). Then a `note:` for each keyword left out (`note: /skills/0/keywords/3 'Falcon SDK' holds the denied term 'Falcon'; a keyword cannot be replaced, so it is left out`). A job version also prints its posting's path and first line, and `--revise` prints each bullet with its original text when it differs (`was: …`) and, for a job, its current flags.
 
 With `--commit`, after the checks pass, it prints the warnings of each version (`warning: general: …`) and any review whose full text cannot be read, then:
 
